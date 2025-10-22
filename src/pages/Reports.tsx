@@ -1,35 +1,70 @@
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Building2, ArrowLeft, Home, DollarSign, Users, Package, TrendingUp, Clock, Calendar, FileText } from "lucide-react";
+import { Building2, ArrowLeft, Home, DollarSign, Users, FileText, TrendingUp, Clock, Calendar, Download } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/lib/supabase";
+import { toast } from "sonner";
+import { jsPDF } from "jspdf";
+import 'jspdf-autotable';
+import * as XLSX from "xlsx";
+
+declare module "jspdf" {
+  interface jsPDF {
+    autoTable: (options: any) => jsPDF;
+  }
+}
 
 interface DailyReport {
   id: string;
-  project_id: string;
+  project_id: string | null;
   report_date: string;
-  weather: string;
-  manpower: number;
-  machinery: string;
-  work_completed: string;
-  materials_used: string;
-  safety_incidents: string | null;
-  remarks: string;
-  cost: number;
-  stage: string;
+  weather: string | null;
+  manpower: number | null;
+  work_completed: string | null;
+  cost: number | null;
+  stage: string | null;
   projects: {
     name: string;
-  };
+  } | null;
+}
+
+interface Project {
+  id: string;
+  name: string;
+  start_date: string;
+  target_end_date?: string;
+  total_cost?: number;
+  created_at: string;
 }
 
 interface ProjectStats {
-  totalCost: number;
+  totalSpent: number;
+  totalBudget: number;
   totalManpower: number;
-  totalMaterials: number;
+  delayedProjects: number;
+}
+
+const STAGE_LIST = [
+  "Site Preparation",
+  "Excavation",
+  "Foundation Work",
+  "Plinth Work",
+  "Superstructure Work",
+  "Roof Work",
+  "Flooring Work",
+  "Plastering",
+  "Door & Window Work",
+  "Electrical & Plumbing Work",
+  "Painting & Finishing Work",
+  "Completed",
+];
+
+interface StageData {
+  name: string;
+  status: string;
   progress: number;
-  daysElapsed: number;
 }
 
 const Reports = () => {
@@ -37,18 +72,20 @@ const Reports = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [reports, setReports] = useState<DailyReport[]>([]);
   const [stats, setStats] = useState<ProjectStats>({
-    totalCost: 0,
+    totalSpent: 0,
+    totalBudget: 0,
     totalManpower: 0,
-    totalMaterials: 0,
-    progress: 0,
-    daysElapsed: 0
+    delayedProjects: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [stages, setStages] = useState<StageData[]>(
+    STAGE_LIST.map((name) => ({ name, status: "Not Started", progress: 0 }))
+  );
 
   useEffect(() => {
     const initializePage = async () => {
       await checkAuth();
-      await fetchReports();
+      await fetchData();
       setLoading(false);
     };
     initializePage();
@@ -59,57 +96,243 @@ const Reports = () => {
     setIsAuthenticated(!!session);
   };
 
-  const fetchReports = async () => {
-    const { data, error } = await supabase
-      .from('daily_reports')
-      .select(`
-        *,
-        projects (
-          name
-        )
-      `)
-      .order('report_date', { ascending: false });
+  const fetchData = async () => {
+    try {
+      const reportsPromise = supabase.from('daily_reports').select('*, projects(name)').order('report_date', { ascending: false });
+      const projectsPromise = supabase.from('projects').select('*');
 
-    if (error) {
-      console.error('Error fetching reports:', error);
-    } else {
-      setReports(data || []);
-      calculateStats(data || []);
+      const [reportsRes, projectsRes] = await Promise.all([reportsPromise, projectsPromise]);
+
+      if (reportsRes.error) throw reportsRes.error;
+      if (projectsRes.error) throw projectsRes.error;
+
+      const reportsData = reportsRes.data as DailyReport[] || [];
+      const projectsData = projectsRes.data as Project[] || [];
+
+      setReports(reportsData);
+      calculateStats(reportsData, projectsData);
+      updateStageProgress(reportsData);
+    } catch (err: any) {
+      console.error('Error fetching data:', err);
     }
   };
 
-  const calculateStats = (reportsData: DailyReport[]) => {
-    const totalCost = reportsData.reduce((sum, report) => sum + report.cost, 0);
-    const totalManpower = reportsData.reduce((sum, report) => sum + report.manpower, 0);
-    const uniqueProjects = new Set(reportsData.map(r => r.project_id)).size;
-    const totalMaterials = reportsData.length; // Simplified count
-    const progress = uniqueProjects > 0 ? (reportsData.length / (uniqueProjects * 10)) * 100 : 0; // Rough estimate
-    const daysElapsed = reportsData.length > 0 ? Math.max(...reportsData.map(r => new Date(r.report_date).getTime())) - Math.min(...reportsData.map(r => new Date(r.report_date).getTime())) : 0;
-    const daysElapsedCount = daysElapsed > 0 ? Math.ceil(daysElapsed / (1000 * 60 * 60 * 24)) : 0;
+  const calculateStats = (reportsData: DailyReport[], projectsData: Project[]) => {
+    const totalSpent = reportsData.reduce((sum, report) => sum + (report.cost || 0), 0);
+    const totalBudget = projectsData.reduce((sum, project) => sum + (project.total_cost || 0), 0);
+    const totalManpower = reportsData.reduce((sum, report) => sum + (report.manpower || 0), 0);
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const delayedProjects = projectsData.filter(p => {
+      if (!p.target_end_date) return false;
+      return new Date(p.target_end_date) < today;
+    }).length;
 
     setStats({
-      totalCost,
+      totalSpent,
+      totalBudget,
       totalManpower,
-      totalMaterials,
-      progress: Math.min(progress, 100),
-      daysElapsed: daysElapsedCount
+      delayedProjects,
     });
   };
 
-  const stages = [
-    { name: "Site Preparation", status: "Not Started", progress: 0 },
-    { name: "Excavation", status: "Not Started", progress: 0 },
-    { name: "Foundation Work", status: "Not Started", progress: 0 },
-    { name: "Plinth Work", status: "Not Started", progress: 0 },
-    { name: "Superstructure Work", status: "Not Started", progress: 0 },
-    { name: "Roof Work", status: "Not Started", progress: 0 },
-    { name: "Flooring Work", status: "Not Started", progress: 0 },
-    { name: "Plastering", status: "Not Started", progress: 0 },
-    { name: "Door & Window Work", status: "Not Started", progress: 0 },
-    { name: "Electrical & Plumbing Work", status: "Not Started", progress: 0 },
-    { name: "Painting & Finishing Work", status: "Not Started", progress: 0 },
-    { name: "Completed", status: "Not Started", progress: 0 },
-  ];
+  const updateStageProgress = (reportsData: DailyReport[]) => {
+    if (reportsData.length === 0) {
+      setStages(STAGE_LIST.map(name => ({ name, status: "Not Started", progress: 0 })));
+      return;
+    }
+
+    const latestReport = reportsData[0];
+    const currentStage = latestReport.stage;
+    if (!currentStage) return;
+
+    const currentStageIndex = STAGE_LIST.indexOf(currentStage);
+    if (currentStageIndex === -1) return;
+
+    if (currentStage === "Completed") {
+      setStages(STAGE_LIST.map(name => ({ name, status: "Completed", progress: 100 })));
+      return;
+    }
+
+    const updatedStages = STAGE_LIST.map((name, index) => {
+      if (index < currentStageIndex) return { name, status: "Completed", progress: 100 };
+      if (index === currentStageIndex) return { name, status: "In Progress", progress: 50 };
+      return { name, status: "Not Started", progress: 0 };
+    });
+    setStages(updatedStages);
+  };
+
+  const handleDownloadPdf = () => {
+    try {
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const today = new Date().toLocaleDateString('en-IN', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      });
+
+      // Header with blue background
+      doc.setFillColor(41, 128, 185);
+      doc.rect(0, 0, pageWidth, 40, 'F');
+
+      // White header text
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(24);
+      doc.text('Construction Project Report', pageWidth / 2, 25, { align: 'center' });
+
+      // Reset to black text
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(12);
+      doc.text(`Report Generated: ${today}`, 15, 50);
+
+      let yPosition = 70;
+
+      // Financial Overview
+      doc.setFontSize(16);
+      doc.text('Financial Overview', 15, yPosition);
+      
+      doc.autoTable({
+        startY: yPosition + 5,
+        head: [['Description', 'Amount (₹)']],
+        body: [
+          ['Total Budget', stats.totalBudget.toLocaleString('en-IN')],
+          ['Total Spent', stats.totalSpent.toLocaleString('en-IN')],
+          ['Balance', (stats.totalBudget - stats.totalSpent).toLocaleString('en-IN')]
+        ],
+        headStyles: { fillColor: [41, 128, 185] },
+        styles: { fontSize: 12 }
+      });
+
+      // Construction Progress
+      yPosition = (doc as any).lastAutoTable.finalY + 20;
+      doc.setFontSize(16);
+      doc.text('Construction Progress', 15, yPosition);
+
+      doc.autoTable({
+        startY: yPosition + 5,
+        head: [['Stage', 'Status', 'Progress']],
+        body: stages.map(stage => [
+          stage.name,
+          stage.status,
+          `${stage.progress}%`
+        ]),
+        headStyles: { fillColor: [41, 128, 185] },
+        styles: { fontSize: 12 }
+      });
+
+      // Project Statistics
+      yPosition = (doc as any).lastAutoTable.finalY + 20;
+      doc.setFontSize(16);
+      doc.text('Project Statistics', 15, yPosition);
+
+      doc.autoTable({
+        startY: yPosition + 5,
+        head: [['Metric', 'Value']],
+        body: [
+          ['Total Manpower', stats.totalManpower.toString()],
+          ['Delayed Projects', stats.delayedProjects.toString()],
+          ['Total Reports', reports.length.toString()]
+        ],
+        headStyles: { fillColor: [41, 128, 185] },
+        styles: { fontSize: 12 }
+      });
+
+      // Recent Activities on New Page
+      doc.addPage();
+      doc.setFillColor(41, 128, 185);
+      doc.rect(0, 0, pageWidth, 40, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(24);
+      doc.text('Recent Activities', pageWidth / 2, 25, { align: 'center' });
+      
+      doc.setTextColor(0, 0, 0);
+      doc.autoTable({
+        startY: 50,
+        head: [['Date', 'Project', 'Work Done', 'Stage', 'Cost (₹)']],
+        body: reports.slice(0, 10).map(report => [
+          new Date(report.report_date).toLocaleDateString('en-IN'),
+          report.projects?.name || 'N/A',
+          report.work_completed || 'N/A',
+          report.stage || 'N/A',
+          (report.cost || 0).toLocaleString('en-IN')
+        ]),
+        headStyles: { fillColor: [41, 128, 185] },
+        styles: { fontSize: 11 },
+        columnStyles: {
+          2: { cellWidth: 80 }
+        }
+      });
+
+      // Page Numbers
+      const pageCount = (doc as any).internal.pages.length;
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(10);
+        doc.text(
+          `Page ${i} of ${pageCount}`,
+          pageWidth / 2,
+          doc.internal.pageSize.getHeight() - 10,
+          { align: 'center' }
+        );
+      }
+
+      doc.save(`Construction_Report_${new Date().toISOString().split('T')[0]}.pdf`);
+      toast.success('Report downloaded successfully!');
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      toast.error('Failed to generate report. Please try again.');
+    }
+  };
+
+  const handleDownloadExcel = () => {
+    try {
+      const worksheets = {
+        Summary: [
+          ['Construction Project Status Report'],
+          ['Generated on:', new Date().toLocaleDateString()],
+          [],
+          ['Metric', 'Value'],
+          ['Total Spent (₹)', stats.totalSpent],
+          ['Total Budget (₹)', stats.totalBudget],
+          ['Total Manpower Days', stats.totalManpower],
+          ['Delayed Projects', stats.delayedProjects],
+          ['Total Reports', reports.length],
+        ],
+        
+        'Project Stages': [
+          ['Stage Name', 'Status', 'Progress (%)'],
+          ...stages.map(s => [s.name, s.status, s.progress]),
+        ],
+        
+        'Recent Reports': [
+          ['Date', 'Project', 'Stage', 'Work Done', 'Manpower', 'Cost (₹)', 'Weather'],
+          ...reports.slice(0, 10).map(r => [
+            new Date(r.report_date).toLocaleDateString(),
+            r.projects?.name || 'N/A',
+            r.stage || 'N/A',
+            r.work_completed || 'N/A',
+            r.manpower || '0',
+            r.cost || '0',
+            r.weather || 'N/A',
+          ]),
+        ],
+      };
+
+      const wb = XLSX.utils.book_new();
+      Object.entries(worksheets).forEach(([name, data]) => {
+        const ws = XLSX.utils.aoa_to_sheet(data);
+        XLSX.utils.book_append_sheet(wb, ws, name);
+      });
+
+      XLSX.writeFile(wb, `Construction_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+      toast.success('Excel report downloaded successfully!');
+    } catch (error) {
+      console.error('Error generating Excel:', error);
+      toast.error('Failed to generate Excel report. Please try again.');
+    }
+  };
 
   if (loading) {
     return (
@@ -133,9 +356,17 @@ const Reports = () => {
             <h1 className="text-2xl font-bold text-foreground">View Reports</h1>
           </div>
           <div className="flex gap-2">
+            <Button variant="outline" onClick={handleDownloadPdf}>
+              <Download className="mr-2 h-4 w-4" />
+              PDF Report
+            </Button>
+            <Button variant="outline" onClick={handleDownloadExcel}>
+              <Download className="mr-2 h-4 w-4" />
+              Excel Report
+            </Button>
             <Button variant="ghost" onClick={() => navigate("/")}>
               <Home className="mr-2 h-4 w-4" />
-              Back to Homepage
+              Homepage
             </Button>
             {isAuthenticated && (
               <Button variant="ghost" onClick={() => navigate("/admin")}>
@@ -151,11 +382,21 @@ const Reports = () => {
         <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Cost</CardTitle>
+              <CardTitle className="text-sm font-medium">Total Spent</CardTitle>
               <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">₹{stats.totalCost.toLocaleString()}</div>
+              <div className="text-2xl font-bold">₹{stats.totalSpent.toLocaleString('en-IN')}</div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Budget</CardTitle>
+              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">₹{stats.totalBudget.toLocaleString('en-IN')}</div>
             </CardContent>
           </Card>
 
@@ -181,21 +422,11 @@ const Reports = () => {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Progress</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{Math.round(stats.progress)}%</div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Days Elapsed</CardTitle>
+              <CardTitle className="text-sm font-medium">Delayed Projects</CardTitle>
               <Clock className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.daysElapsed}</div>
+              <div className="text-2xl font-bold">{stats.delayedProjects}</div>
             </CardContent>
           </Card>
         </div>
@@ -210,17 +441,17 @@ const Reports = () => {
                 {reports.slice(0, 5).map((report) => (
                   <div key={report.id} className="border border-border rounded-lg p-4">
                     <div className="flex items-center justify-between mb-2">
-                      <h3 className="font-semibold text-foreground">{report.projects.name}</h3>
+                      <h3 className="font-semibold text-foreground">{report.projects?.name || 'Unknown Project'}</h3>
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <Calendar className="h-4 w-4" />
                         {new Date(report.report_date).toLocaleDateString()}
                       </div>
                     </div>
-                    <p className="text-sm text-muted-foreground mb-2">{report.work_completed}</p>
+                    <p className="text-sm text-muted-foreground mb-2">{report.work_completed || 'No description'}</p>
                     <div className="flex items-center gap-4 text-sm">
-                      <span>Weather: {report.weather}</span>
-                      <span>Manpower: {report.manpower}</span>
-                      <span>Cost: ₹{report.cost.toLocaleString()}</span>
+                      <span>Weather: {report.weather || 'N/A'}</span>
+                      <span>Manpower: {report.manpower || 0}</span>
+                      <span>Cost: ₹{(report.cost || 0).toLocaleString('en-IN')}</span>
                     </div>
                   </div>
                 ))}

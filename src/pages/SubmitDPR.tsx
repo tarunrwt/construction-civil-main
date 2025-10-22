@@ -15,11 +15,32 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+const projectStages = [
+  "Site Preparation",
+  "Excavation",
+  "Foundation Work",
+  "Plinth Work",
+  "Superstructure Work",
+  "Roof Work",
+  "Flooring Work",
+  "Plastering",
+  "Door & Window Work",
+  "Electrical & Plumbing Work",
+  "Painting & Finishing Work",
+  "Completed",
+];
+
+interface Project {
+  id: string;
+  name: string;
+}
+
 const SubmitDPR = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [formData, setFormData] = useState({
-    projectName: "",
+    projectId: "",
     date: "",
     weather: "",
     manpowerCount: "",
@@ -28,20 +49,36 @@ const SubmitDPR = () => {
     materialUsed: "",
     safetyIncidents: "",
     remarks: "",
+    stage: "",
+    cost: "", // Added cost field
   });
 
   useEffect(() => {
-    checkAuth();
+    const initialize = async () => {
+      await checkAuth();
+      await fetchProjects();
+      setLoading(false);
+    };
+    initialize();
   }, []);
 
   const checkAuth = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
     if (!session) {
       navigate("/auth");
-      return;
     }
-    setLoading(false);
+  };
+
+  const fetchProjects = async () => {
+    const { data, error } = await supabase.from("projects").select("id, name");
+    if (error) {
+      toast.error("Could not fetch projects.");
+    } else {
+      setProjects(data || []);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -49,29 +86,8 @@ const SubmitDPR = () => {
     setLoading(true);
 
     try {
-      // find or create project
-      const { data: projectData, error: projectErr } = await supabase
-        .from("projects")
-        .select("id")
-        .eq("name", formData.projectName)
-        .single();
-
-      if (projectErr && projectErr.code !== 'PGRST116') throw projectErr; // PGRST116 is "not found"
-
-      let project_id = projectData?.id;
-
-      if (!project_id) {
-        const { data: newProj, error: newProjErr } = await supabase
-          .from("projects")
-          .insert([{ name: formData.projectName, start_date: formData.date }])
-          .select()
-          .single();
-        if (newProjErr) throw newProjErr;
-        project_id = newProj.id;
-      }
-
       const payload = {
-        project_id,
+        project_id: formData.projectId,
         report_date: formData.date,
         weather: formData.weather,
         manpower: parseInt(formData.manpowerCount || "0", 10),
@@ -80,7 +96,8 @@ const SubmitDPR = () => {
         materials_used: formData.materialUsed,
         safety_incidents: formData.safetyIncidents,
         remarks: formData.remarks,
-        cost: 0, // No cost field in this form
+        cost: parseFloat(formData.cost || "0"),
+        stage: formData.stage,
       };
 
       const { error: insertErr } = await supabase.from("daily_reports").insert([payload]);
@@ -89,10 +106,9 @@ const SubmitDPR = () => {
 
       toast.success("DPR submitted successfully!");
       navigate("/admin");
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      const errorMessage = err instanceof Error ? err.message : JSON.stringify(err);
-      toast.error("Error submitting report: " + errorMessage);
+      toast.error("Error submitting report: " + (err.message || JSON.stringify(err)));
     } finally {
       setLoading(false);
     }
@@ -121,7 +137,9 @@ const SubmitDPR = () => {
             <div className="bg-primary p-2 rounded-lg">
               <Building2 className="h-6 w-6 text-primary-foreground" />
             </div>
-            <h1 className="text-2xl font-bold text-foreground">Submit Daily Progress Report</h1>
+            <h1 className="text-2xl font-bold text-foreground">
+              Submit Daily Progress Report
+            </h1>
           </div>
           <Button variant="ghost" onClick={() => navigate("/admin")}>
             <ArrowLeft className="mr-2 h-4 w-4" />
@@ -131,16 +149,28 @@ const SubmitDPR = () => {
       </header>
 
       <main className="container mx-auto px-4 py-8 max-w-3xl">
-        <form onSubmit={handleSubmit} className="bg-card rounded-lg p-8 border border-border space-y-6">
+        <form
+          onSubmit={handleSubmit}
+          className="bg-card rounded-lg p-8 border border-border space-y-6"
+        >
           <div className="space-y-2">
-            <Label htmlFor="projectName">Project Name *</Label>
-            <Input
-              id="projectName"
-              value={formData.projectName}
-              onChange={(e) => handleChange("projectName", e.target.value)}
-              placeholder="Enter project name"
+            <Label htmlFor="projectId">Project Name *</Label>
+            <Select
+              value={formData.projectId}
+              onValueChange={(value) => handleChange("projectId", value)}
               required
-            />
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select a project" />
+              </SelectTrigger>
+              <SelectContent>
+                {projects.map((project) => (
+                  <SelectItem key={project.id} value={project.id}>
+                    {project.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-2">
@@ -151,6 +181,37 @@ const SubmitDPR = () => {
               value={formData.date}
               onChange={(e) => handleChange("date", e.target.value)}
               required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="stage">Project Stage *</Label>
+            <Select
+              value={formData.stage}
+              onValueChange={(value) => handleChange("stage", value)}
+              required
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select current project stage" />
+              </SelectTrigger>
+              <SelectContent>
+                {projectStages.map((stage) => (
+                  <SelectItem key={stage} value={stage}>
+                    {stage}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="cost">Cost Incurred Today (₹)</Label>
+            <Input
+              id="cost"
+              type="number"
+              value={formData.cost}
+              onChange={(e) => handleChange("cost", e.target.value)}
+              placeholder="Enter amount spent today"
             />
           </div>
 
@@ -253,3 +314,4 @@ const SubmitDPR = () => {
 };
 
 export default SubmitDPR;
+

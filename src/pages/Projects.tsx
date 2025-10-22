@@ -1,50 +1,94 @@
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Building2, ArrowLeft, Plus, Calendar, DollarSign } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+  DialogDescription,
+  DialogClose,
+} from "@/components/ui/dialog";
 import { supabase } from "@/lib/supabase";
+import { toast } from "sonner";
 
 interface Project {
   id: string;
   name: string;
   start_date: string;
-  total_cost: number;
+  target_end_date?: string | null;
+  total_cost?: number | null;
 }
 
-const Projects = () => {
+export default function ProjectsPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [newProject, setNewProject] = useState({
+    name: "",
+    start_date: "",
+    target_end_date: "",
+    total_cost: "",
+  });
 
   useEffect(() => {
-    const initializePage = async () => {
+    const initialize = async () => {
       await checkAuth();
       await fetchProjects();
       setLoading(false);
     };
-    initializePage();
+    initialize();
   }, []);
 
   const checkAuth = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-
-    if (!session) {
-      navigate("/auth");
-      return;
-    }
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session) navigate("/auth");
   };
 
   const fetchProjects = async () => {
-    const { data, error } = await supabase
-      .from('projects')
-      .select('*')
-      .order('start_date', { ascending: false });
-
+    const { data, error } = await supabase.from("projects").select("*").order("start_date", { ascending: false });
     if (error) {
-      console.error('Error fetching projects:', error);
+      console.error("Error fetching projects:", error);
+      toast.error("Failed to fetch projects. Ensure DB schema includes target_end_date and total_cost.");
+      setProjects([]);
     } else {
-      setProjects(data || []);
+      setProjects((data as Project[]) || []);
+    }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { id, value } = e.target;
+    setNewProject((p) => ({ ...p, [id]: value }));
+  };
+
+  const handleCreateProject = async () => {
+    if (!newProject.name || !newProject.start_date) {
+      toast.error("Please fill required fields.");
+      return;
+    }
+    const payload: any = {
+      name: newProject.name,
+      start_date: newProject.start_date,
+    };
+    if (newProject.target_end_date) payload.target_end_date = newProject.target_end_date;
+    if (newProject.total_cost) payload.total_cost = parseFloat(newProject.total_cost);
+
+    const { error } = await supabase.from("projects").insert([payload]);
+    if (error) toast.error("Error creating project: " + error.message);
+    else {
+      toast.success("Project created");
+      setIsDialogOpen(false);
+      setNewProject({ name: "", start_date: "", target_end_date: "", total_cost: "" });
+      fetchProjects();
     }
   };
 
@@ -80,14 +124,46 @@ const Projects = () => {
         <div className="mb-6 flex items-center justify-between">
           <div>
             <h2 className="text-3xl font-bold text-foreground mb-2">Your Projects</h2>
-            <p className="text-muted-foreground">
-              Manage and track all your construction projects
-            </p>
+            <p className="text-muted-foreground">Manage and track all your construction projects</p>
           </div>
-          <Button>
-            <Plus className="mr-2 h-4 w-4" />
-            New Project
-          </Button>
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                New Project
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Create a New Project</DialogTitle>
+                <DialogDescription>Enter the details for your new construction project.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Project Name</Label>
+                  <Input id="name" value={newProject.name} onChange={handleInputChange} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="start_date">Start Date</Label>
+                  <Input id="start_date" type="date" value={newProject.start_date} onChange={handleInputChange} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="target_end_date">Target End Date</Label>
+                  <Input id="target_end_date" type="date" value={newProject.target_end_date} onChange={handleInputChange} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="total_cost">Total Budget (₹)</Label>
+                  <Input id="total_cost" type="number" placeholder="e.g., 500000" value={newProject.total_cost} onChange={handleInputChange} />
+                </div>
+              </div>
+              <DialogFooter>
+                <DialogClose asChild>
+                  <Button variant="outline">Cancel</Button>
+                </DialogClose>
+                <Button onClick={handleCreateProject}>Create Project</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -98,12 +174,10 @@ const Projects = () => {
                   <Plus className="h-5 w-5" />
                   Create Your First Project
                 </CardTitle>
-                <CardDescription>
-                  Get started by creating a new construction project
-                </CardDescription>
+                <CardDescription>Get started by creating a new construction project</CardDescription>
               </CardHeader>
               <CardContent>
-                <Button className="w-full">Create Project</Button>
+                <Button className="w-full" onClick={() => setIsDialogOpen(true)}>Create Project</Button>
               </CardContent>
             </Card>
           ) : (
@@ -119,11 +193,9 @@ const Projects = () => {
                 <CardContent>
                   <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
                     <DollarSign className="h-4 w-4" />
-                    Total Cost: ${project.total_cost.toLocaleString()}
+                    Total Budget: ₹{project.total_cost ? project.total_cost.toLocaleString("en-IN") : "0"}
                   </div>
-                  <Button variant="outline" className="w-full">
-                    View Details
-                  </Button>
+                  <Button variant="outline" className="w-full">View Details</Button>
                 </CardContent>
               </Card>
             ))
@@ -132,6 +204,5 @@ const Projects = () => {
       </main>
     </div>
   );
-};
+}
 
-export default Projects;

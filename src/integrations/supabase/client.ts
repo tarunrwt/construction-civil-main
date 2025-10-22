@@ -2,8 +2,26 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+// Read env vars and trim surrounding quotes if present (some editors/CI add quotes)
+const rawUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const rawKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+
+const SUPABASE_URL = rawUrl ? rawUrl.replace(/^"|"$/g, "") : rawUrl;
+const SUPABASE_PUBLISHABLE_KEY = rawKey ? rawKey.replace(/^"|"$/g, "") : rawKey;
+
+// Basic runtime validation to make debugging easier when env vars are missing or malformed.
+if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+  // Avoid printing secrets — mask the key when logging
+  const maskedKey = SUPABASE_PUBLISHABLE_KEY
+    ? `${SUPABASE_PUBLISHABLE_KEY.slice(0, 8)}...${SUPABASE_PUBLISHABLE_KEY.slice(-8)}`
+    : "(missing)";
+  // eslint-disable-next-line no-console
+  console.error(`[supabase] Missing configuration. SUPABASE_URL=${SUPABASE_URL || '(missing)'} SUPABASE_PUBLISHABLE_KEY=${maskedKey}`);
+} else {
+  const maskedKey = `${SUPABASE_PUBLISHABLE_KEY.slice(0, 8)}...${SUPABASE_PUBLISHABLE_KEY.slice(-8)}`;
+  // eslint-disable-next-line no-console
+  console.info(`[supabase] initialized with SUPABASE_URL=${SUPABASE_URL} SUPABASE_PUBLISHABLE_KEY=${maskedKey}`);
+}
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";

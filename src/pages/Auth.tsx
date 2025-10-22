@@ -32,18 +32,37 @@ const Auth = () => {
     }
 
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-    setLoading(false);
+      setLoading(false);
 
-    if (error) {
-      toast.error(error.message);
-    } else {
-      toast.success("Signed in successfully!");
-      navigate("/admin");
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.error('[supabase][signin] auth error', error);
+        
+        // Check specific error cases
+        if (error.message?.toLowerCase().includes('email not confirmed')) {
+          toast.error('Please check your email and click the confirmation link before signing in');
+        } else if (error.message?.toLowerCase().includes('invalid login credentials')) {
+          toast.error('Invalid email or password. If you just signed up, please confirm your email first.');
+        } else {
+          const status = (error as any).status || (error as any).statusCode || '';
+          toast.error(`${error.message || 'Sign in failed'}${status ? ` (status: ${status})` : ''}`);
+        }
+      } else {
+        toast.success("Signed in successfully!");
+        navigate("/admin");
+      }
+    } catch (err) {
+      setLoading(false);
+      // Log unexpected errors (network, serialization)
+      // eslint-disable-next-line no-console
+      console.error('[supabase][signin] unexpected error', err);
+      toast.error('An unexpected error occurred during sign in');
     }
   };
 
@@ -61,20 +80,37 @@ const Auth = () => {
     }
 
     setLoading(true);
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/admin`,
-      },
-    });
+    try {
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/admin`,
+        },
+      });
 
-    setLoading(false);
+      setLoading(false);
 
-    if (error) {
-      toast.error(error.message);
-    } else {
-      toast.success("Account created! You can now sign in.");
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.error('[supabase][signup] auth error', error);
+        
+        if (error.message?.toLowerCase().includes('user already registered')) {
+          toast.error('This email is already registered. Please sign in or reset your password.');
+        } else {
+          const status = (error as any).status || (error as any).statusCode || '';
+          toast.error(`${error.message || 'Sign up failed'}${status ? ` (status: ${status})` : ''}`);
+        }
+      } else {
+        toast.success(
+          "Account created! Please check your email for a confirmation link. You must confirm your email before signing in."
+        );
+      }
+    } catch (err) {
+      setLoading(false);
+      // eslint-disable-next-line no-console
+      console.error('[supabase][signup] unexpected error', err);
+      toast.error('An unexpected error occurred during sign up');
     }
   };
 

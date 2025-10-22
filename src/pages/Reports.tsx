@@ -8,20 +8,20 @@ import { supabase } from "@/lib/supabase";
 
 interface DailyReport {
   id: string;
-  project_id: string;
+  project_id: string | null;
   report_date: string;
-  weather: string;
-  manpower: number;
-  machinery: string;
-  work_completed: string;
-  materials_used: string;
+  weather: string | null;
+  manpower: number | null;
+  machinery: string | null;
+  work_completed: string | null;
+  materials_used: string | null;
   safety_incidents: string | null;
-  remarks: string;
-  cost: number;
-  stage: string;
+  remarks: string | null;
+  cost: number | null;
+  stage: string | null;
   projects: {
     name: string;
-  };
+  } | null;
 }
 
 interface ProjectStats {
@@ -60,27 +60,53 @@ const Reports = () => {
   };
 
   const fetchReports = async () => {
-    const { data, error } = await supabase
-      .from('daily_reports')
-      .select(`
-        *,
-        projects (
-          name
-        )
-      `)
-      .order('report_date', { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from('daily_reports')
+        .select(`
+          *,
+          projects (
+            name
+          )
+        `)
+        .order('report_date', { ascending: false });
 
-    if (error) {
-      console.error('Error fetching reports:', error);
-    } else {
-      setReports(data || []);
-      calculateStats(data || []);
+      if (error) {
+        console.error('Error fetching reports:', error);
+        // If 401 error, try to sign in anonymously or handle auth
+        if (error.code === 'PGRST301' || error.message.includes('JWT')) {
+          console.log('Authentication required, attempting anonymous sign in...');
+          const { error: authError } = await supabase.auth.signInAnonymously();
+          if (!authError) {
+            // Retry the fetch after auth
+            const { data: retryData, error: retryError } = await supabase
+              .from('daily_reports')
+              .select(`
+                *,
+                projects (
+                  name
+                )
+              `)
+              .order('report_date', { ascending: false });
+            if (!retryError) {
+              setReports(retryData || []);
+              calculateStats(retryData || []);
+              return;
+            }
+          }
+        }
+      } else {
+        setReports(data || []);
+        calculateStats(data || []);
+      }
+    } catch (err) {
+      console.error('Unexpected error:', err);
     }
   };
 
   const calculateStats = (reportsData: DailyReport[]) => {
-    const totalCost = reportsData.reduce((sum, report) => sum + report.cost, 0);
-    const totalManpower = reportsData.reduce((sum, report) => sum + report.manpower, 0);
+    const totalCost = reportsData.reduce((sum, report) => sum + (report.cost || 0), 0);
+    const totalManpower = reportsData.reduce((sum, report) => sum + (report.manpower || 0), 0);
     const uniqueProjects = new Set(reportsData.map(r => r.project_id)).size;
     const totalMaterials = reportsData.length; // Simplified count
     const progress = uniqueProjects > 0 ? (reportsData.length / (uniqueProjects * 10)) * 100 : 0; // Rough estimate
@@ -210,17 +236,17 @@ const Reports = () => {
                 {reports.slice(0, 5).map((report) => (
                   <div key={report.id} className="border border-border rounded-lg p-4">
                     <div className="flex items-center justify-between mb-2">
-                      <h3 className="font-semibold text-foreground">{report.projects.name}</h3>
+                      <h3 className="font-semibold text-foreground">{report.projects?.name || 'Unknown Project'}</h3>
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <Calendar className="h-4 w-4" />
                         {new Date(report.report_date).toLocaleDateString()}
                       </div>
                     </div>
-                    <p className="text-sm text-muted-foreground mb-2">{report.work_completed}</p>
+                    <p className="text-sm text-muted-foreground mb-2">{report.work_completed || 'No description'}</p>
                     <div className="flex items-center gap-4 text-sm">
-                      <span>Weather: {report.weather}</span>
-                      <span>Manpower: {report.manpower}</span>
-                      <span>Cost: ${report.cost.toLocaleString()}</span>
+                      <span>Weather: {report.weather || 'N/A'}</span>
+                      <span>Manpower: {report.manpower || 0}</span>
+                      <span>Cost: ${(report.cost || 0).toLocaleString()}</span>
                     </div>
                   </div>
                 ))}

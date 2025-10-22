@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here.
 All colors MUST be HSL.
 */
 
@@ -101,5 +101,17 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground;
+  }
+
+  /* Fix for Safari user-select support */
+  [data-vaul-drawer] {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* Additional Safari compatibility fixes */
+  [data-vaul-drawer] {
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
   }
 }

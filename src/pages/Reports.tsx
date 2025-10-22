@@ -10,6 +10,12 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 
+declare module "jspdf" {
+  interface jsPDF {
+    autoTable: (options: any) => jsPDF;
+  }
+}
+
 interface DailyReport {
   id: string;
   project_id: string | null;
@@ -201,8 +207,8 @@ const Reports = () => {
       // Financial Overview
       doc.setFontSize(16);
       doc.text('Financial Overview', 15, yPosition);
-      
-      doc.autoTable({
+
+      autoTable(doc, {
         startY: yPosition + 5,
         head: [['Description', 'Amount (₹)']],
         body: [
@@ -219,7 +225,7 @@ const Reports = () => {
       doc.setFontSize(16);
       doc.text('Construction Progress', 15, yPosition);
 
-      doc.autoTable({
+      autoTable(doc, {
         startY: yPosition + 5,
         head: [['Stage', 'Status', 'Progress']],
         body: stages.map(stage => [
@@ -236,7 +242,7 @@ const Reports = () => {
       doc.setFontSize(16);
       doc.text('Project Statistics', 15, yPosition);
 
-      doc.autoTable({
+      autoTable(doc, {
         startY: yPosition + 5,
         head: [['Metric', 'Value']],
         body: [
@@ -255,9 +261,9 @@ const Reports = () => {
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(24);
       doc.text('Recent Activities', pageWidth / 2, 25, { align: 'center' });
-      
+
       doc.setTextColor(0, 0, 0);
-      doc.autoTable({
+      autoTable(doc, {
         startY: 50,
         head: [['Date', 'Project', 'Work Done', 'Stage', 'Cost (₹)']],
         body: reports.slice(0, 10).map(report => [

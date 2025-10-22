@@ -89,9 +89,10 @@ const SubmitDPR = () => {
 
       toast.success("DPR submitted successfully!");
       navigate("/admin");
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
-      toast.error("Error submitting report: " + (err.message || JSON.stringify(err)));
+      const errorMessage = err instanceof Error ? err.message : JSON.stringify(err);
+      toast.error("Error submitting report: " + errorMessage);
     } finally {
       setLoading(false);
     }

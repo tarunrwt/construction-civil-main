@@ -372,25 +372,31 @@ const Reports = () => {
               {projectId ? `Report for: ${projectName}` : "Overall Project Reports"}
             </h1>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap justify-end">
             <Button variant="outline" onClick={handleDownloadPdf}>
-              <Download className="mr-2 h-4 w-4" />
-              PDF Report
+              <Download className="mr-2 h-4 w-4" /> PDF Report
             </Button>
             <Button variant="outline" onClick={handleDownloadExcel}>
-              <Download className="mr-2 h-4 w-4" />
-              Excel Report
+              <Download className="mr-2 h-4 w-4" /> Excel Report
             </Button>
+
+            {/* This button takes you from a specific project back to the main reports list */}
             {projectId && (
               <Button variant="ghost" onClick={() => navigate("/reports")}>
-                <Home className="mr-2 h-4 w-4" />
-                All Reports
+                <Building2 className="mr-2 h-4 w-4" /> All Reports
               </Button>
             )}
+
+            {/* This is the restored Homepage button */}
+            <Button variant="ghost" onClick={() => navigate("/")}>
+                <Home className="mr-2 h-4 w-4" />
+                Homepage
+            </Button>
+
+            {/* This button appears if you are logged in */}
             {isAuthenticated && (
               <Button variant="ghost" onClick={() => navigate("/admin")}>
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Back to Dashboard
+                <ArrowLeft className="mr-2 h-4 w-4" /> Dashboard
               </Button>
             )}
           </div>

@@ -7,14 +7,8 @@ import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { jsPDF } from "jspdf";
-import "jspdf-autotable";
+import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
-
-declare module "jspdf" {
-  interface jsPDF {
-    autoTable: (options: any) => jsPDF;
-  }
-}
 
 interface DailyReport {
   id: string;
@@ -369,7 +363,7 @@ const Reports = () => {
               <Building2 className="h-6 w-6 text-primary-foreground" />
             </div>
             <h1 className="text-2xl font-bold text-foreground">
-              {projectId ? `Report for: ${projectName}` : "Overall Project Reports"}
+              {projectId ? `Report for: ${projectName}` : "Project Reports"}
             </h1>
           </div>
           <div className="flex gap-2 flex-wrap justify-end">

@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Building2, ArrowLeft, Home, DollarSign, Users, FileText, TrendingUp, Clock, Calendar, Download } from "lucide-react";
@@ -7,7 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { jsPDF } from "jspdf";
-import 'jspdf-autotable';
+import "jspdf-autotable";
 import * as XLSX from "xlsx";
 
 declare module "jspdf" {
@@ -43,7 +43,8 @@ interface ProjectStats {
   totalSpent: number;
   totalBudget: number;
   totalManpower: number;
-  delayedProjects: number;
+  delayedProjects?: number;
+  timeStatus?: string;
 }
 
 const STAGE_LIST = [
@@ -69,15 +70,16 @@ interface StageData {
 
 const Reports = () => {
   const navigate = useNavigate();
+  const { projectId } = useParams();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [reports, setReports] = useState<DailyReport[]>([]);
   const [stats, setStats] = useState<ProjectStats>({
     totalSpent: 0,
     totalBudget: 0,
-    totalManpower: 0,
-    delayedProjects: 0,
+    totalManpower: 0
   });
   const [loading, setLoading] = useState(true);
+  const [projectName, setProjectName] = useState("Overall");
   const [stages, setStages] = useState<StageData[]>(
     STAGE_LIST.map((name) => ({ name, status: "Not Started", progress: 0 }))
   );
@@ -89,7 +91,7 @@ const Reports = () => {
       setLoading(false);
     };
     initializePage();
-  }, []);
+  }, [projectId]);
 
   const checkAuth = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -98,16 +100,25 @@ const Reports = () => {
 
   const fetchData = async () => {
     try {
-      const reportsPromise = supabase.from('daily_reports').select('*, projects(name)').order('report_date', { ascending: false });
-      const projectsPromise = supabase.from('projects').select('*');
+      let reportsQuery = supabase.from('daily_reports').select('*, projects(name)').order('report_date', { ascending: false });
+      let projectsQuery = supabase.from('projects').select('*');
+      
+      if (projectId) {
+        reportsQuery = reportsQuery.eq('project_id', projectId);
+        projectsQuery = projectsQuery.eq('id', projectId);
+      }
 
-      const [reportsRes, projectsRes] = await Promise.all([reportsPromise, projectsPromise]);
+      const [reportsRes, projectsRes] = await Promise.all([reportsQuery, projectsQuery]);
 
       if (reportsRes.error) throw reportsRes.error;
       if (projectsRes.error) throw projectsRes.error;
 
       const reportsData = reportsRes.data as DailyReport[] || [];
       const projectsData = projectsRes.data as Project[] || [];
+
+      if (projectId && projectsData.length > 0) {
+        setProjectName(projectsData[0].name);
+      }
 
       setReports(reportsData);
       calculateStats(reportsData, projectsData);
@@ -122,19 +133,23 @@ const Reports = () => {
     const totalBudget = projectsData.reduce((sum, project) => sum + (project.total_cost || 0), 0);
     const totalManpower = reportsData.reduce((sum, report) => sum + (report.manpower || 0), 0);
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const delayedProjects = projectsData.filter(p => {
-      if (!p.target_end_date) return false;
-      return new Date(p.target_end_date) < today;
-    }).length;
-
-    setStats({
-      totalSpent,
-      totalBudget,
-      totalManpower,
-      delayedProjects,
-    });
+    if (projectId && projectsData.length > 0) {
+      const project = projectsData[0];
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      let timeStatus = "N/A";
+      if (project.target_end_date) {
+        const targetDate = new Date(project.target_end_date);
+        const daysDiff = Math.floor((targetDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        timeStatus = daysDiff >= 0 ? `${daysDiff} Days Remaining` : `${Math.abs(daysDiff)} Days Overdue`;
+      }
+      setStats({ totalSpent, totalBudget, totalManpower, timeStatus });
+    } else {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const delayedProjects = projectsData.filter(p => p.target_end_date && new Date(p.target_end_date) < today).length;
+      setStats({ totalSpent, totalBudget, totalManpower, delayedProjects });
+    }
   };
 
   const updateStageProgress = (reportsData: DailyReport[]) => {
@@ -353,7 +368,9 @@ const Reports = () => {
             <div className="bg-primary p-2 rounded-lg">
               <Building2 className="h-6 w-6 text-primary-foreground" />
             </div>
-            <h1 className="text-2xl font-bold text-foreground">View Reports</h1>
+            <h1 className="text-2xl font-bold text-foreground">
+              {projectId ? `Report for: ${projectName}` : "Overall Project Reports"}
+            </h1>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={handleDownloadPdf}>
@@ -364,10 +381,12 @@ const Reports = () => {
               <Download className="mr-2 h-4 w-4" />
               Excel Report
             </Button>
-            <Button variant="ghost" onClick={() => navigate("/")}>
-              <Home className="mr-2 h-4 w-4" />
-              Homepage
-            </Button>
+            {projectId && (
+              <Button variant="ghost" onClick={() => navigate("/reports")}>
+                <Home className="mr-2 h-4 w-4" />
+                All Reports
+              </Button>
+            )}
             {isAuthenticated && (
               <Button variant="ghost" onClick={() => navigate("/admin")}>
                 <ArrowLeft className="mr-2 h-4 w-4" />
@@ -422,11 +441,11 @@ const Reports = () => {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Delayed Projects</CardTitle>
+              <CardTitle className="text-sm font-medium">{projectId ? "Time Status" : "Delayed Projects"}</CardTitle>
               <Clock className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.delayedProjects}</div>
+              <div className="text-2xl font-bold">{projectId ? stats.timeStatus : stats.delayedProjects}</div>
             </CardContent>
           </Card>
         </div>

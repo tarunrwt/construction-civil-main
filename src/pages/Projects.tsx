@@ -195,7 +195,7 @@ export default function ProjectsPage() {
                     <DollarSign className="h-4 w-4" />
                     Total Budget: ₹{project.total_cost ? project.total_cost.toLocaleString("en-IN") : "0"}
                   </div>
-                  <Button variant="outline" className="w-full">View Details</Button>
+                  <Button variant="outline" className="w-full" onClick={() => navigate(`/reports/${project.id}`)}>View Details</Button>
                 </CardContent>
               </Card>
             ))

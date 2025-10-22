@@ -44,17 +44,57 @@ const SubmitDPR = () => {
     setLoading(false);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Validate form
-    if (!formData.projectName || !formData.date || !formData.workCompleted) {
-      toast.error("Please fill in all required fields");
-      return;
-    }
+    setLoading(true);
 
-    toast.success("DPR submitted successfully!");
-    console.log("DPR Data:", formData);
-    navigate("/admin");
+    try {
+      // find or create project
+      const { data: projectData, error: projectErr } = await supabase
+        .from("projects")
+        .select("id")
+        .eq("name", formData.projectName)
+        .single();
+
+      if (projectErr && projectErr.code !== 'PGRST116') throw projectErr; // PGRST116 is "not found"
+
+      let project_id = projectData?.id;
+
+      if (!project_id) {
+        const { data: newProj, error: newProjErr } = await supabase
+          .from("projects")
+          .insert([{ name: formData.projectName, start_date: formData.date }])
+          .select()
+          .single();
+        if (newProjErr) throw newProjErr;
+        project_id = newProj.id;
+      }
+
+      const payload = {
+        project_id,
+        report_date: formData.date,
+        weather: formData.weather,
+        manpower: parseInt(formData.manpowerCount || "0", 10),
+        machinery: formData.machineryUsed,
+        work_completed: formData.workCompleted,
+        materials_used: formData.materialUsed,
+        safety_incidents: formData.safetyIncidents,
+        remarks: formData.remarks,
+        cost: 0, // No cost field in this form
+      };
+
+      const { error: insertErr } = await supabase.from("daily_reports").insert([payload]);
+
+      if (insertErr) throw insertErr;
+
+      toast.success("DPR submitted successfully!");
+      navigate("/admin");
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Error submitting report: " + (err.message || JSON.stringify(err)));
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleChange = (field: string, value: string) => {

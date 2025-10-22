@@ -155,7 +155,7 @@ const Reports = () => {
               <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">${stats.totalCost.toLocaleString()}</div>
+              <div className="text-2xl font-bold">₹{stats.totalCost.toLocaleString()}</div>
             </CardContent>
           </Card>
 
@@ -220,7 +220,7 @@ const Reports = () => {
                     <div className="flex items-center gap-4 text-sm">
                       <span>Weather: {report.weather}</span>
                       <span>Manpower: {report.manpower}</span>
-                      <span>Cost: ${report.cost.toLocaleString()}</span>
+                      <span>Cost: ₹{report.cost.toLocaleString()}</span>
                     </div>
                   </div>
                 ))}

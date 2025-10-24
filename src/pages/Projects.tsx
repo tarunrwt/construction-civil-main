@@ -58,9 +58,9 @@ export default function ProjectsPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const { data, error } = await supabase
+    const { data, error } = await (supabase
       .from("projects")
-      .select("*")
+      .select("*") as any)
       .eq("user_id", user.id)
       .order("start_date", { ascending: false });
     if (error) {

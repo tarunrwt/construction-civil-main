@@ -16,14 +16,12 @@ export type Database = {
           report_date: string
           weather: string | null
           manpower: number | null
-          machinery: string | null
           work_completed: string | null
-          materials_used: string | null
-          safety_incidents: string | null
-          remarks: string | null
           cost: number | null
           stage: string | null
-          created_at: string | null
+          user_id: string
+          created_at: string
+          updated_at: string
         }
         Insert: {
           id?: string
@@ -31,14 +29,12 @@ export type Database = {
           report_date: string
           weather?: string | null
           manpower?: number | null
-          machinery?: string | null
           work_completed?: string | null
-          materials_used?: string | null
-          safety_incidents?: string | null
-          remarks?: string | null
           cost?: number | null
           stage?: string | null
-          created_at?: string | null
+          user_id: string
+          created_at?: string
+          updated_at?: string
         }
         Update: {
           id?: string
@@ -46,21 +42,24 @@ export type Database = {
           report_date?: string
           weather?: string | null
           manpower?: number | null
-          machinery?: string | null
           work_completed?: string | null
-          materials_used?: string | null
-          safety_incidents?: string | null
-          remarks?: string | null
           cost?: number | null
           stage?: string | null
-          created_at?: string | null
+          user_id?: string
+          created_at?: string
+          updated_at?: string
         }
         Relationships: [
           {
             foreignKeyName: "daily_reports_project_id_fkey"
             columns: ["project_id"]
-            isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_reports_user_id_fkey"
+            columns: ["user_id"]
+            referencedRelation: "users"
             referencedColumns: ["id"]
           }
         ]
@@ -69,25 +68,108 @@ export type Database = {
         Row: {
           id: string
           name: string
-          start_date: string | null
+          description: string | null
+          start_date: string
+          target_end_date: string | null
           total_cost: number | null
-          created_at: string | null
+          status: string
+          user_id: string
+          created_at: string
+          updated_at: string
         }
         Insert: {
           id?: string
           name: string
-          start_date?: string | null
+          description?: string | null
+          start_date: string
+          target_end_date?: string | null
           total_cost?: number | null
-          created_at?: string | null
+          status?: string
+          user_id: string
+          created_at?: string
+          updated_at?: string
         }
         Update: {
           id?: string
           name?: string
-          start_date?: string | null
+          description?: string | null
+          start_date?: string
+          target_end_date?: string | null
           total_cost?: number | null
-          created_at?: string | null
+          status?: string
+          user_id?: string
+          created_at?: string
+          updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "projects_user_id_fkey"
+            columns: ["user_id"]
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      project_stages: {
+        Row: {
+          id: string
+          project_id: string
+          stage_name: string
+          stage_order: number
+          status: string
+          progress_percentage: number
+          estimated_start_date: string | null
+          estimated_end_date: string | null
+          actual_start_date: string | null
+          actual_end_date: string | null
+          user_id: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          project_id: string
+          stage_name: string
+          stage_order: number
+          status?: string
+          progress_percentage?: number
+          estimated_start_date?: string | null
+          estimated_end_date?: string | null
+          actual_start_date?: string | null
+          actual_end_date?: string | null
+          user_id: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          project_id?: string
+          stage_name?: string
+          stage_order?: number
+          status?: string
+          progress_percentage?: number
+          estimated_start_date?: string | null
+          estimated_end_date?: string | null
+          actual_start_date?: string | null
+          actual_end_date?: string | null
+          user_id?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_stages_project_id_fkey"
+            columns: ["project_id"]
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_stages_user_id_fkey"
+            columns: ["user_id"]
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
       }
     }
     Views: {

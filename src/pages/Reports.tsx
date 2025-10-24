@@ -103,8 +103,11 @@ const Reports = () => {
     if (!user) return;
 
     try {
-      let reportsQuery: any = supabase.from('daily_reports').select('*, projects(name)').eq('user_id', user.id).order('report_date', { ascending: false });
-      let projectsQuery: any = supabase.from('projects').select('*').eq('user_id', user.id);
+      let reportsQuery = supabase.from('daily_reports').select('*, projects(name)') as any;
+      reportsQuery = reportsQuery.eq('user_id', user.id).order('report_date', { ascending: false });
+
+      let projectsQuery = supabase.from('projects').select('*') as any;
+      projectsQuery = projectsQuery.eq('user_id', user.id);
 
       if (projectId) {
         reportsQuery = reportsQuery.eq('project_id', projectId);

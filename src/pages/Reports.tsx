@@ -9,12 +9,17 @@ import { toast } from "sonner";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
+import { differenceInDays, parseISO } from "date-fns";
 
 declare module "jspdf" {
   interface jsPDF {
-    autoTable: (options: any) => jsPDF;
+    lastAutoTable: {
+      finalY: number;
+    };
   }
 }
+
+
 
 interface DailyReport {
   id: string;
@@ -103,10 +108,10 @@ const Reports = () => {
     if (!user) return;
 
     try {
-      let reportsQuery = supabase.from('daily_reports').select('*, projects(name)') as any;
+      let reportsQuery = supabase.from('daily_reports').select('*, projects(name)');
       reportsQuery = reportsQuery.eq('user_id', user.id).order('report_date', { ascending: false });
 
-      let projectsQuery = supabase.from('projects').select('*') as any;
+      let projectsQuery = supabase.from('projects').select('*');
       projectsQuery = projectsQuery.eq('user_id', user.id);
 
       if (projectId) {
@@ -128,8 +133,8 @@ const Reports = () => {
 
       setReports(reportsData);
       calculateStats(reportsData, projectsData);
-      updateStageProgress(reportsData);
-    } catch (err: any) {
+      updateStageProgress(reportsData, projectsData, reportsData.slice().reverse());
+    } catch (err: unknown) {
       console.error('Error fetching data:', err);
     }
   };
@@ -158,30 +163,48 @@ const Reports = () => {
     }
   };
 
-  const updateStageProgress = (reportsData: DailyReport[]) => {
-    if (reportsData.length === 0) {
+  const updateStageProgress = (reportsData: DailyReport[], projectsData: Project[], reportsAsc: DailyReport[]) => {
+    const latestReport = reportsData.length > 0 ? reportsData[0] : null;
+    const currentStage = latestReport?.stage;
+
+    if (!currentStage) {
       setStages(STAGE_LIST.map(name => ({ name, status: "Not Started", progress: 0 })));
       return;
     }
 
-    const latestReport = reportsData[0];
-    const currentStage = latestReport.stage;
-    if (!currentStage) return;
-
     const currentStageIndex = STAGE_LIST.indexOf(currentStage);
-    if (currentStageIndex === -1) return;
 
-    if (currentStage === "Completed") {
-      setStages(STAGE_LIST.map(name => ({ name, status: "Completed", progress: 100 })));
-      return;
+    // Dynamic progress for single-project view
+    if (projectId && projectsData.length > 0) {
+        const project = projectsData[0];
+        if (!project.start_date || !project.target_end_date) return;
+
+        const totalDuration = differenceInDays(parseISO(project.target_end_date), parseISO(project.start_date));
+        const durationPerStage = totalDuration / (STAGE_LIST.length - 1);
+
+        const updatedStages = STAGE_LIST.map((name, index) => {
+            if (index < currentStageIndex) return { name, status: "Completed", progress: 100 };
+            if (index > currentStageIndex) return { name, status: "Not Started", progress: 0 };
+
+            // Logic for the current stage
+            const firstReportForCurrentStage = reportsAsc.find(r => r.stage === name);
+            const stageStartDate = firstReportForCurrentStage ? parseISO(firstReportForCurrentStage.report_date) : parseISO(project.start_date);
+            const daysElapsedInStage = differenceInDays(new Date(), stageStartDate);
+
+            let progress = Math.min(99, Math.max(0, (daysElapsedInStage / durationPerStage) * 100));
+            if (currentStage === "Completed") progress = 100;
+
+            return { name, status: currentStage === "Completed" ? "Completed" : "In Progress", progress: Math.round(progress) };
+        });
+        setStages(updatedStages);
+    } else { // Fallback for overall view
+        const updatedStages = STAGE_LIST.map((name, index) => {
+          if (index < currentStageIndex) return { name, status: "Completed", progress: 100 };
+          if (index === currentStageIndex) return { name, status: "In Progress", progress: 50 };
+          return { name, status: "Not Started", progress: 0 };
+        });
+        setStages(updatedStages);
     }
-
-    const updatedStages = STAGE_LIST.map((name, index) => {
-      if (index < currentStageIndex) return { name, status: "Completed", progress: 100 };
-      if (index === currentStageIndex) return { name, status: "In Progress", progress: 50 };
-      return { name, status: "Not Started", progress: 0 };
-    });
-    setStages(updatedStages);
   };
 
   const handleDownloadPdf = () => {
@@ -227,7 +250,7 @@ const Reports = () => {
       });
 
       // Construction Progress
-      yPosition = (doc as any).lastAutoTable.finalY + 20;
+      yPosition = doc.lastAutoTable.finalY + 20;
       doc.setFontSize(16);
       doc.text('Construction Progress', 15, yPosition);
 
@@ -244,7 +267,7 @@ const Reports = () => {
       });
 
       // Project Statistics
-      yPosition = (doc as any).lastAutoTable.finalY + 20;
+      yPosition = doc.lastAutoTable.finalY + 20;
       doc.setFontSize(16);
       doc.text('Project Statistics', 15, yPosition);
 
@@ -287,7 +310,7 @@ const Reports = () => {
       });
 
       // Page Numbers
-      const pageCount = (doc as any).internal.pages.length;
+      const pageCount = doc.internal.pages.length;
       for (let i = 1; i <= pageCount; i++) {
         doc.setPage(i);
         doc.setFontSize(10);

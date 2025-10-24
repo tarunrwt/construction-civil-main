@@ -253,7 +253,7 @@ const Reports = () => {
         head: [['Metric', 'Value']],
         body: [
           ['Total Manpower', stats.totalManpower.toString()],
-          ['Delayed Projects', stats.delayedProjects.toString()],
+          ['Delayed Projects', (stats.delayedProjects || 0).toString()],
           ['Total Reports', reports.length.toString()]
         ],
         headStyles: { fillColor: [41, 128, 185] },
@@ -318,7 +318,7 @@ const Reports = () => {
           ['Total Spent (₹)', stats.totalSpent],
           ['Total Budget (₹)', stats.totalBudget],
           ['Total Manpower Days', stats.totalManpower],
-          ['Delayed Projects', stats.delayedProjects],
+          ['Delayed Projects', (stats.delayedProjects || 0)],
           ['Total Reports', reports.length],
         ],
         

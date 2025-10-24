@@ -76,10 +76,8 @@ const SubmitDPR = () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const { data, error } = await supabase
-      .from("projects")
-      .select("id, name")
-      .eq("user_id", user.id);
+    const query = supabase.from("projects").select("id, name") as any;
+    const { data, error } = await query.eq("user_id", user.id);
     if (error) {
       toast.error("Could not fetch projects.");
     } else {

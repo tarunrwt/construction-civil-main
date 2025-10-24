@@ -99,10 +99,13 @@ const Reports = () => {
   };
 
   const fetchData = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
     try {
-      let reportsQuery = supabase.from('daily_reports').select('*, projects(name)').order('report_date', { ascending: false });
-      let projectsQuery = supabase.from('projects').select('*');
-      
+      let reportsQuery = supabase.from('daily_reports').select('*, projects(name)').eq('user_id', user.id).order('report_date', { ascending: false });
+      let projectsQuery = supabase.from('projects').select('*').eq('user_id', user.id);
+
       if (projectId) {
         reportsQuery = reportsQuery.eq('project_id', projectId);
         projectsQuery = projectsQuery.eq('id', projectId);

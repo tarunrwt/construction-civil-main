@@ -73,7 +73,13 @@ const SubmitDPR = () => {
   };
 
   const fetchProjects = async () => {
-    const { data, error } = await supabase.from("projects").select("id, name");
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data, error } = await supabase
+      .from("projects")
+      .select("id, name")
+      .eq("user_id", user.id);
     if (error) {
       toast.error("Could not fetch projects.");
     } else {
@@ -82,6 +88,12 @@ const SubmitDPR = () => {
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error("You must be logged in to submit a report.");
+      return;
+    }
+
     e.preventDefault();
     setLoading(true);
 
@@ -98,6 +110,7 @@ const SubmitDPR = () => {
         remarks: formData.remarks,
         cost: parseFloat(formData.cost || "0"),
         stage: formData.stage,
+        user_id: user.id,
       };
 
       const { error: insertErr } = await supabase.from("daily_reports").insert([payload]);

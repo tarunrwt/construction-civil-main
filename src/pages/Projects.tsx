@@ -55,7 +55,14 @@ export default function ProjectsPage() {
   };
 
   const fetchProjects = async () => {
-    const { data, error } = await supabase.from("projects").select("*").order("start_date", { ascending: false });
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data, error } = await supabase
+      .from("projects")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("start_date", { ascending: false });
     if (error) {
       console.error("Error fetching projects:", error);
       toast.error("Failed to fetch projects. Ensure DB schema includes target_end_date and total_cost.");
@@ -71,6 +78,12 @@ export default function ProjectsPage() {
   };
 
   const handleCreateProject = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error("You must be logged in to create a project.");
+      return;
+    }
+
     if (!newProject.name || !newProject.start_date) {
       toast.error("Please fill required fields.");
       return;
@@ -78,6 +91,7 @@ export default function ProjectsPage() {
     const payload: any = {
       name: newProject.name,
       start_date: newProject.start_date,
+      user_id: user.id,
     };
     if (newProject.target_end_date) payload.target_end_date = newProject.target_end_date;
     if (newProject.total_cost) payload.total_cost = parseFloat(newProject.total_cost);

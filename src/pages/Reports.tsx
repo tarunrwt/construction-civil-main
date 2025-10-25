@@ -4,12 +4,32 @@ import { Button } from "@/components/ui/button";
 import { Building2, ArrowLeft, Home, DollarSign, Users, FileText, TrendingUp, Clock, Calendar, Download } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 import { differenceInDays, parseISO } from "date-fns";
+import {
+  LineChart,
+  Line,
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  ScatterChart,
+  Scatter
+} from "recharts";
 
 declare module "jspdf" {
   interface jsPDF {
@@ -485,49 +505,179 @@ const Reports = () => {
           </Card>
         </div>
 
-        <div className="space-y-6">
-          <div className="bg-card rounded-lg p-6 border border-border">
-            <h2 className="text-xl font-bold text-foreground mb-6">Recent Reports</h2>
-            {reports.length === 0 ? (
-              <p className="text-muted-foreground">No reports submitted yet.</p>
-            ) : (
-              <div className="space-y-4">
-                {reports.slice(0, 5).map((report) => (
-                  <div key={report.id} className="border border-border rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="font-semibold text-foreground">{report.projects?.name || 'Unknown Project'}</h3>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Calendar className="h-4 w-4" />
-                        {new Date(report.report_date).toLocaleDateString()}
+        <Tabs defaultValue="overview" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="charts">Analytics</TabsTrigger>
+            <TabsTrigger value="reports">Reports</TabsTrigger>
+            <TabsTrigger value="stages">Stages</TabsTrigger>
+          </TabsList>
+
+          {/* Overview Tab */}
+          <TabsContent value="overview" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Cost Trend</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <AreaChart data={reports.slice().reverse().map((report, index) => ({
+                      date: new Date(report.report_date).toLocaleDateString(),
+                      cost: report.cost || 0,
+                      cumulative: reports.slice(0, index + 1).reduce((sum, r) => sum + (r.cost || 0), 0)
+                    }))}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="date" />
+                      <YAxis />
+                      <Tooltip formatter={(value) => [`₹${value.toLocaleString('en-IN')}`, '']} />
+                      <Area type="monotone" dataKey="cost" stroke="#8884d8" fill="#8884d8" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Manpower vs Cost</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <ScatterChart data={reports.map(report => ({
+                      manpower: report.manpower || 0,
+                      cost: report.cost || 0,
+                      date: new Date(report.report_date).toLocaleDateString()
+                    }))}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="manpower" name="Manpower" />
+                      <YAxis dataKey="cost" name="Cost (₹)" />
+                      <Tooltip formatter={(value, name) => [
+                        name === 'cost' ? `₹${value.toLocaleString('en-IN')}` : value,
+                        name === 'cost' ? 'Cost' : 'Manpower'
+                      ]} />
+                      <Scatter dataKey="cost" fill="#8884d8" />
+                    </ScatterChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          {/* Analytics Tab */}
+          <TabsContent value="charts" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Monthly Spending</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={Object.entries(
+                      reports.reduce((acc, report) => {
+                        const month = new Date(report.report_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+                        acc[month] = (acc[month] || 0) + (report.cost || 0);
+                        return acc;
+                      }, {} as Record<string, number>)
+                    ).map(([month, cost]) => ({ month, cost }))}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="month" />
+                      <YAxis />
+                      <Tooltip formatter={(value) => [`₹${value.toLocaleString('en-IN')}`, '']} />
+                      <Bar dataKey="cost" fill="#8884d8" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Weather Impact</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <PieChart>
+                      <Pie
+                        data={Object.entries(
+                          reports.reduce((acc, report) => {
+                            const weather = report.weather || 'Unknown';
+                            acc[weather] = (acc[weather] || 0) + 1;
+                            return acc;
+                          }, {} as Record<string, number>)
+                        ).map(([weather, count]) => ({ weather, count }))}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={({ weather, percent }) => `${weather} ${(percent * 100).toFixed(0)}%`}
+                        outerRadius={80}
+                        fill="#8884d8"
+                        dataKey="count"
+                      >
+                        {Object.entries(
+                          reports.reduce((acc, report) => {
+                            const weather = report.weather || 'Unknown';
+                            acc[weather] = (acc[weather] || 0) + 1;
+                            return acc;
+                          }, {} as Record<string, number>)
+                        ).map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={`hsl(${index * 60}, 70%, 50%)`} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          {/* Reports Tab */}
+          <TabsContent value="reports" className="space-y-6">
+            <div className="bg-card rounded-lg p-6 border border-border">
+              <h2 className="text-xl font-bold text-foreground mb-6">Recent Reports</h2>
+              {reports.length === 0 ? (
+                <p className="text-muted-foreground">No reports submitted yet.</p>
+              ) : (
+                <div className="space-y-4">
+                  {reports.slice(0, 5).map((report) => (
+                    <div key={report.id} className="border border-border rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="font-semibold text-foreground">{report.projects?.name || 'Unknown Project'}</h3>
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Calendar className="h-4 w-4" />
+                          {new Date(report.report_date).toLocaleDateString()}
+                        </div>
+                      </div>
+                      <p className="text-sm text-muted-foreground mb-2">{report.work_completed || 'No description'}</p>
+                      <div className="flex items-center gap-4 text-sm">
+                        <span>Weather: {report.weather || 'N/A'}</span>
+                        <span>Manpower: {report.manpower || 0}</span>
+                        <span>Cost: ₹{(report.cost || 0).toLocaleString('en-IN')}</span>
                       </div>
                     </div>
-                    <p className="text-sm text-muted-foreground mb-2">{report.work_completed || 'No description'}</p>
-                    <div className="flex items-center gap-4 text-sm">
-                      <span>Weather: {report.weather || 'N/A'}</span>
-                      <span>Manpower: {report.manpower || 0}</span>
-                      <span>Cost: ₹{(report.cost || 0).toLocaleString('en-IN')}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </TabsContent>
+
+          {/* Stages Tab */}
+          <TabsContent value="stages" className="space-y-6">
+            <div className="bg-card rounded-lg p-6 border border-border">
+              <h2 className="text-xl font-bold text-foreground mb-6">Project Stages</h2>
+              <div className="space-y-6">
+                {stages.map((stage, index) => (
+                  <div key={index} className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-foreground">{stage.name}</span>
+                      <span className="text-sm text-muted-foreground">{stage.status}</span>
                     </div>
+                    <Progress value={stage.progress} className="h-2" />
                   </div>
                 ))}
               </div>
-            )}
-          </div>
-
-          <div className="bg-card rounded-lg p-6 border border-border">
-            <h2 className="text-xl font-bold text-foreground mb-6">Project Stages</h2>
-            <div className="space-y-6">
-              {stages.map((stage, index) => (
-                <div key={index} className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-foreground">{stage.name}</span>
-                    <span className="text-sm text-muted-foreground">{stage.status}</span>
-                  </div>
-                  <Progress value={stage.progress} className="h-2" />
-                </div>
-              ))}
             </div>
-          </div>
-        </div>
+          </TabsContent>
+        </Tabs>
       </main>
     </div>
   );

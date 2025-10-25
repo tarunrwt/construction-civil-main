@@ -4,7 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Building2, ArrowLeft } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Building2, ArrowLeft, Upload, X, Camera, DollarSign } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 import {
@@ -35,6 +37,12 @@ interface Project {
   name: string;
 }
 
+interface PhotoFile {
+  file: File;
+  preview: string;
+  description: string;
+}
+
 const SubmitDPR = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -50,8 +58,14 @@ const SubmitDPR = () => {
     safetyIncidents: "",
     remarks: "",
     stage: "",
-    cost: "", // Added cost field
+    cost: "",
+    laborCost: "",
+    materialCost: "",
+    equipmentCost: "",
+    subcontractorCost: "",
+    otherCost: "",
   });
+  const [photos, setPhotos] = useState<PhotoFile[]>([]);
 
   useEffect(() => {
     const initialize = async () => {
@@ -81,6 +95,53 @@ const SubmitDPR = () => {
     }
   };
 
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    
+    files.forEach((file) => {
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const newPhoto: PhotoFile = {
+            file,
+            preview: event.target?.result as string,
+            description: '',
+          };
+          setPhotos(prev => [...prev, newPhoto]);
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+  };
+
+  const removePhoto = (index: number) => {
+    setPhotos(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const updatePhotoDescription = (index: number, description: string) => {
+    setPhotos(prev => prev.map((photo, i) => 
+      i === index ? { ...photo, description } : photo
+    ));
+  };
+
+  const uploadPhotoToStorage = async (file: File, reportId: string, description: string) => {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${reportId}_${Date.now()}.${fileExt}`;
+    const filePath = `dpr-photos/${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('dpr-photos')
+      .upload(filePath, file);
+
+    if (uploadError) throw uploadError;
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('dpr-photos')
+      .getPublicUrl(filePath);
+
+    return { url: publicUrl, name: fileName };
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -96,20 +157,57 @@ const SubmitDPR = () => {
     }
 
     try {
+      // Calculate total cost from categories
+      const totalCost = parseFloat(formData.laborCost || "0") +
+                       parseFloat(formData.materialCost || "0") +
+                       parseFloat(formData.equipmentCost || "0") +
+                       parseFloat(formData.subcontractorCost || "0") +
+                       parseFloat(formData.otherCost || "0");
+
       const payload = {
         project_id: formData.projectId,
         report_date: formData.date,
         weather: formData.weather,
         manpower: parseInt(formData.manpowerCount || "0", 10),
         work_completed: formData.workCompleted,
-        cost: parseFloat(formData.cost || "0"),
+        cost: totalCost,
         stage: formData.stage,
+        labor_cost: parseFloat(formData.laborCost || "0"),
+        material_cost: parseFloat(formData.materialCost || "0"),
+        equipment_cost: parseFloat(formData.equipmentCost || "0"),
+        subcontractor_cost: parseFloat(formData.subcontractorCost || "0"),
+        other_cost: parseFloat(formData.otherCost || "0"),
         user_id: session.user.id,
       };
 
-      const { error: insertErr } = await supabase.from("daily_reports").insert([payload]);
+      const { data: reportData, error: insertErr } = await supabase
+        .from("daily_reports")
+        .insert([payload])
+        .select()
+        .single();
 
       if (insertErr) throw insertErr;
+
+      // Upload photos if any
+      if (photos.length > 0) {
+        const photoPromises = photos.map(async (photo) => {
+          const { url, name } = await uploadPhotoToStorage(
+            photo.file, 
+            reportData.id, 
+            photo.description
+          );
+          
+          return supabase.from("dpr_photos").insert([{
+            daily_report_id: reportData.id,
+            photo_url: url,
+            photo_name: name,
+            photo_description: photo.description,
+            user_id: session.user.id,
+          }]);
+        });
+
+        await Promise.all(photoPromises);
+      }
 
       toast.success("DPR submitted successfully!");
       navigate("/admin");
@@ -212,16 +310,86 @@ const SubmitDPR = () => {
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="cost">Cost Incurred Today (₹)</Label>
-            <Input
-              id="cost"
-              type="number"
-              value={formData.cost}
-              onChange={(e) => handleChange("cost", e.target.value)}
-              placeholder="Enter amount spent today"
-            />
-          </div>
+          {/* Cost Categories Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <DollarSign className="h-5 w-5" />
+                Cost Breakdown
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="laborCost">Labor Cost (₹)</Label>
+                  <Input
+                    id="laborCost"
+                    type="number"
+                    step="0.01"
+                    value={formData.laborCost}
+                    onChange={(e) => handleChange("laborCost", e.target.value)}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="materialCost">Material Cost (₹)</Label>
+                  <Input
+                    id="materialCost"
+                    type="number"
+                    step="0.01"
+                    value={formData.materialCost}
+                    onChange={(e) => handleChange("materialCost", e.target.value)}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="equipmentCost">Equipment Cost (₹)</Label>
+                  <Input
+                    id="equipmentCost"
+                    type="number"
+                    step="0.01"
+                    value={formData.equipmentCost}
+                    onChange={(e) => handleChange("equipmentCost", e.target.value)}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="subcontractorCost">Subcontractor Cost (₹)</Label>
+                  <Input
+                    id="subcontractorCost"
+                    type="number"
+                    step="0.01"
+                    value={formData.subcontractorCost}
+                    onChange={(e) => handleChange("subcontractorCost", e.target.value)}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="otherCost">Other Costs (₹)</Label>
+                  <Input
+                    id="otherCost"
+                    type="number"
+                    step="0.01"
+                    value={formData.otherCost}
+                    onChange={(e) => handleChange("otherCost", e.target.value)}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Total Cost (₹)</Label>
+                  <div className="p-2 bg-muted rounded-md font-semibold">
+                    ₹{(
+                      parseFloat(formData.laborCost || "0") +
+                      parseFloat(formData.materialCost || "0") +
+                      parseFloat(formData.equipmentCost || "0") +
+                      parseFloat(formData.subcontractorCost || "0") +
+                      parseFloat(formData.otherCost || "0")
+                    ).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
           <div className="space-y-2">
             <Label htmlFor="weather">Weather Conditions</Label>
@@ -295,6 +463,72 @@ const SubmitDPR = () => {
               rows={3}
             />
           </div>
+
+          {/* Photo Upload Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Camera className="h-5 w-5" />
+                Progress Photos
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
+                <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                <Label htmlFor="photo-upload" className="cursor-pointer">
+                  <span className="text-sm font-medium text-primary hover:text-primary/80">
+                    Click to upload photos
+                  </span>
+                  <span className="text-xs text-muted-foreground block mt-1">
+                    PNG, JPG, JPEG up to 10MB each
+                  </span>
+                </Label>
+                <Input
+                  id="photo-upload"
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  onChange={handlePhotoUpload}
+                  className="hidden"
+                />
+              </div>
+
+              {photos.length > 0 && (
+                <div className="space-y-4">
+                  <h4 className="text-sm font-medium">Uploaded Photos ({photos.length})</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {photos.map((photo, index) => (
+                      <div key={index} className="relative border border-border rounded-lg overflow-hidden">
+                        <img
+                          src={photo.preview}
+                          alt={`Upload ${index + 1}`}
+                          className="w-full h-32 object-cover"
+                        />
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          className="absolute top-2 right-2 h-6 w-6 p-0"
+                          onClick={() => removePhoto(index)}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                        <div className="p-3">
+                          <Textarea
+                            placeholder="Add description for this photo..."
+                            value={photo.description}
+                            onChange={(e) => updatePhotoDescription(index, e.target.value)}
+                            rows={2}
+                            className="text-xs"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           <div className="space-y-2">
             <Label htmlFor="remarks">Additional Remarks</Label>

@@ -1,9 +1,10 @@
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Building2, LogOut, Home } from "lucide-react";
+import { Building2, Package, DollarSign, Users } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
+import Header from "@/components/Header";
 
 const Admin = () => {
   const navigate = useNavigate();
@@ -30,17 +31,6 @@ const Admin = () => {
     setLoading(false);
   };
 
-  const handleSignOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    
-    if (error) {
-      toast.error("Error signing out");
-    } else {
-      toast.success("Signed out successfully");
-      navigate("/");
-    }
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -54,26 +44,7 @@ const Admin = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b border-border">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="bg-primary p-2 rounded-lg">
-              <Building2 className="h-6 w-6 text-primary-foreground" />
-            </div>
-            <h1 className="text-2xl font-bold text-foreground">Admin Dashboard</h1>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="ghost" onClick={() => navigate("/")}>
-              <Home className="mr-2 h-4 w-4" />
-              Go to Homepage
-            </Button>
-            <Button variant="ghost" onClick={handleSignOut}>
-              <LogOut className="mr-2 h-4 w-4" />
-              Sign Out
-            </Button>
-          </div>
-        </div>
-      </header>
+      <Header title="Admin Dashboard" />
 
       <main className="container mx-auto px-4 py-8">
         <div className="bg-card rounded-lg p-8 border border-border mb-8">
@@ -92,7 +63,7 @@ const Admin = () => {
           </div>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-6">
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
           <div className="bg-card rounded-lg p-6 border border-border">
             <h3 className="text-lg font-semibold text-foreground mb-4">Submit Daily Report</h3>
             <p className="text-muted-foreground mb-4">
@@ -115,6 +86,39 @@ const Admin = () => {
               Create and manage your construction projects
             </p>
             <Button onClick={() => navigate("/projects")}>Manage Projects</Button>
+          </div>
+
+          <div className="bg-card rounded-lg p-6 border border-border">
+            <h3 className="text-lg font-semibold text-foreground mb-4">Materials & Inventory</h3>
+            <p className="text-muted-foreground mb-4">
+              Track materials, inventory levels, and usage
+            </p>
+            <Button onClick={() => navigate("/materials")}>
+              <Package className="mr-2 h-4 w-4" />
+              Manage Materials
+            </Button>
+          </div>
+
+          <div className="bg-card rounded-lg p-6 border border-border">
+            <h3 className="text-lg font-semibold text-foreground mb-4">Financial Dashboard</h3>
+            <p className="text-muted-foreground mb-4">
+              Advanced financial analysis and budgeting
+            </p>
+            <Button onClick={() => navigate("/financials")}>
+              <DollarSign className="mr-2 h-4 w-4" />
+              View Financials
+            </Button>
+          </div>
+
+          <div className="bg-card rounded-lg p-6 border border-border">
+            <h3 className="text-lg font-semibold text-foreground mb-4">User Management</h3>
+            <p className="text-muted-foreground mb-4">
+              Manage user roles and project assignments
+            </p>
+            <Button onClick={() => navigate("/users")}>
+              <Users className="mr-2 h-4 w-4" />
+              Manage Users
+            </Button>
           </div>
         </div>
       </main>

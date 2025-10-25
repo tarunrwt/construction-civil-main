@@ -9,6 +9,9 @@ import Admin from "./pages/Admin";
 import SubmitDPR from "./pages/SubmitDPR";
 import Reports from "./pages/Reports";
 import Projects from "./pages/Projects";
+import MaterialsInventory from "./pages/MaterialsInventory";
+import Financials from "./pages/Financials";
+import UserManagement from "./pages/UserManagement";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -27,6 +30,9 @@ const App = () => (
           <Route path="/reports" element={<Reports />} />
           <Route path="/reports/:projectId" element={<Reports />} />
           <Route path="/projects" element={<Projects />} />
+          <Route path="/materials" element={<MaterialsInventory />} />
+          <Route path="/financials" element={<Financials />} />
+          <Route path="/users" element={<UserManagement />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

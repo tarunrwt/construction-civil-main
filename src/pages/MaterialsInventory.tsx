@@ -902,7 +902,11 @@ const MaterialsInventory = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">
-                    ₹{materials.reduce((sum, material) => sum + (material.current_stock * material.cost_per_unit), 0).toLocaleString()}
+                    ₹{materials.reduce((sum, material) => {
+                      const stock = Number(material.current_stock) || 0;
+                      const cost = Number(material.cost_per_unit) || 0;
+                      return sum + (stock * cost);
+                    }, 0).toLocaleString('en-IN')}
                   </div>
                 </CardContent>
               </Card>
@@ -924,7 +928,10 @@ const MaterialsInventory = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">
-                    ₹{materialPurchases.reduce((sum, purchase) => sum + purchase.total_cost, 0).toLocaleString()}
+                    ₹{materialPurchases.reduce((sum, purchase) => {
+                      const cost = Number(purchase.total_cost) || 0;
+                      return sum + cost;
+                    }, 0).toLocaleString('en-IN')}
                   </div>
                 </CardContent>
               </Card>
@@ -957,12 +964,18 @@ const MaterialsInventory = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
-                    {materialUsage.slice(0, 5).map((usage) => (
-                      <div key={usage.id} className="flex justify-between text-sm">
-                        <span>{usage.materials.name}</span>
-                        <span>{usage.quantity_used} {usage.materials.unit}</span>
+                    {materialUsage.length > 0 ? (
+                      materialUsage.slice(0, 5).map((usage) => (
+                        <div key={usage.id} className="flex justify-between text-sm">
+                          <span>{usage.materials?.name || 'Unknown Material'}</span>
+                          <span>{usage.quantity_used} {usage.materials?.unit || 'units'}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-sm text-muted-foreground text-center py-4">
+                        No usage recorded yet
                       </div>
-                    ))}
+                    )}
                   </div>
                 </CardContent>
               </Card>

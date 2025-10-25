@@ -622,15 +622,15 @@ const Reports = () => {
                 </CardHeader>
                 <CardContent>
                   <ResponsiveContainer width="100%" height={300}>
-                    <AreaChart data={reports.slice().reverse().map((report, index) => ({
+                    <AreaChart data={reports.length > 0 ? reports.slice().reverse().map((report, index) => ({
                       date: new Date(report.report_date).toLocaleDateString(),
                       cost: report.cost || 0,
                       cumulative: reports.slice(0, index + 1).reduce((sum, r) => sum + (r.cost || 0), 0)
-                    }))}>
+                    })) : [{ date: 'No Data', cost: 0, cumulative: 0 }]}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="date" />
                       <YAxis />
-                      <Tooltip formatter={(value) => [`₹${value.toLocaleString('en-IN')}`, '']} />
+                      <Tooltip formatter={(value) => [`₹${Number(value).toLocaleString('en-IN')}`, '']} />
                       <Area type="monotone" dataKey="cost" stroke="#8884d8" fill="#8884d8" />
                     </AreaChart>
                   </ResponsiveContainer>
@@ -643,16 +643,16 @@ const Reports = () => {
                 </CardHeader>
                 <CardContent>
                   <ResponsiveContainer width="100%" height={300}>
-                    <ScatterChart data={reports.map(report => ({
+                    <ScatterChart data={reports.length > 0 ? reports.map(report => ({
                       manpower: report.manpower || 0,
                       cost: report.cost || 0,
                       date: new Date(report.report_date).toLocaleDateString()
-                    }))}>
+                    })) : [{ manpower: 0, cost: 0, date: 'No Data' }]}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="manpower" name="Manpower" />
                       <YAxis dataKey="cost" name="Cost (₹)" />
                       <Tooltip formatter={(value, name) => [
-                        name === 'cost' ? `₹${value.toLocaleString('en-IN')}` : value,
+                        name === 'cost' ? `₹${Number(value).toLocaleString('en-IN')}` : value,
                         name === 'cost' ? 'Cost' : 'Manpower'
                       ]} />
                       <Scatter dataKey="cost" fill="#8884d8" />

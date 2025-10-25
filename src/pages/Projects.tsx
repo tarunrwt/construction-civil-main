@@ -71,7 +71,7 @@ export default function ProjectsPage() {
     const { data, error } = await supabase.from("projects").select("*").order("start_date", { ascending: false });
     if (error) {
       console.error("Error fetching projects:", error);
-      toast.error("Failed to fetch projects. Ensure DB schema includes target_end_date and total_cost.");
+      toast.error("Failed to fetch projects. Ensure DB schema is up to date.");
       setProjects([]);
     } else {
       setProjects((data as Project[]) || []);
@@ -85,37 +85,64 @@ export default function ProjectsPage() {
 
   const handleCreateProject = async () => {
     if (!newProject.name || !newProject.start_date) {
-      toast.error("Please fill required fields.");
+      toast.error("Please fill all required fields.");
       return;
     }
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+        toast.error("You must be logged in to create a project.");
+        return;
+    }
+
     const payload: any = {
       name: newProject.name,
       start_date: newProject.start_date,
+      user_id: user.id,
     };
     if (newProject.target_end_date) payload.target_end_date = newProject.target_end_date;
     if (newProject.total_cost) payload.total_cost = parseFloat(newProject.total_cost);
 
     const { error } = await supabase.from("projects").insert([payload]);
-    if (error) toast.error("Error creating project: " + error.message);
+    if (error) {
+        toast.error("Error creating project: " + error.message);
+    }
     else {
-      toast.success("Project created");
+      toast.success("Project created successfully!");
       setIsDialogOpen(false);
       setNewProject({ name: "", start_date: "", target_end_date: "", total_cost: "" });
-      fetchProjects();
+      fetchProjects(); // Refresh the projects list
     }
   };
 
   const handleDeleteProject = async () => {
     if (!deleteProjectId) return;
-    const { error } = await supabase.from("projects").delete().eq("id", deleteProjectId);
-    if (error) {
-      toast.error("Error deleting project: " + error.message);
-    } else {
-      toast.success("Project deleted successfully");
-      fetchProjects();
+
+    try {
+        // First, delete all daily_reports associated with the project
+        const { error: reportsError } = await supabase
+            .from('daily_reports')
+            .delete()
+            .eq('project_id', deleteProjectId);
+
+        if (reportsError) throw reportsError;
+
+        // After related reports are deleted, delete the project itself
+        const { error: projectError } = await supabase
+            .from('projects')
+            .delete()
+            .eq('id', deleteProjectId);
+
+        if (projectError) throw projectError;
+
+        toast.success("Project and all associated reports have been deleted.");
+        setProjects(projects.filter(p => p.id !== deleteProjectId)); // Update UI instantly
+    } catch (error: any) {
+        toast.error("Error deleting project: " + error.message);
+    } finally {
+        setDeleteDialogOpen(false);
+        setDeleteProjectId(null);
     }
-    setDeleteDialogOpen(false);
-    setDeleteProjectId(null);
   };
 
   if (loading) {
@@ -166,11 +193,11 @@ export default function ProjectsPage() {
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <Label htmlFor="name">Project Name</Label>
+                  <Label htmlFor="name">Project Name *</Label>
                   <Input id="name" value={newProject.name} onChange={handleInputChange} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="start_date">Start Date</Label>
+                  <Label htmlFor="start_date">Start Date *</Label>
                   <Input id="start_date" type="date" value={newProject.start_date} onChange={handleInputChange} />
                 </div>
                 <div className="space-y-2">
@@ -223,10 +250,10 @@ export default function ProjectsPage() {
                   </div>
                   <div className="flex gap-2">
                     <Button variant="outline" className="flex-1" onClick={() => navigate(`/reports/${project.id}`)}>View Details</Button>
-                    <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+                    <AlertDialog open={deleteDialogOpen && deleteProjectId === project.id} onOpenChange={setDeleteDialogOpen}>
                       <AlertDialogTrigger asChild>
                         <Button
-                          variant="outline"
+                          variant="destructive"
                           size="icon"
                           onClick={() => {
                             setDeleteProjectId(project.id);
@@ -238,13 +265,13 @@ export default function ProjectsPage() {
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
-                          <AlertDialogTitle>Delete Project</AlertDialogTitle>
+                          <AlertDialogTitle>Are you sure you want to delete "{project.name}"?</AlertDialogTitle>
                           <AlertDialogDescription>
-                            Are you sure you want to delete "{project.name}"? This action cannot be undone.
+                            This will permanently delete the project and all its reports. This action cannot be undone.
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogCancel onClick={() => setDeleteProjectId(null)}>Cancel</AlertDialogCancel>
                           <AlertDialogAction onClick={handleDeleteProject}>Delete</AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>
@@ -259,4 +286,3 @@ export default function ProjectsPage() {
     </div>
   );
 }
-

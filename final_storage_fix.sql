@@ -1,7 +1,32 @@
--- Complete Photo Management System
--- This script creates the database structure for storing and managing DPR photos
+-- Final Storage Fix - Handles All Existing Policies
+-- Run this in Supabase SQL Editor
 
--- Create dpr_photos table to store photo references
+-- 1. Create storage bucket if it doesn't exist
+INSERT INTO storage.buckets (id, name, public) 
+VALUES ('dpr-photos', 'dpr-photos', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- 2. Drop ALL existing storage policies to avoid conflicts
+DO $$ 
+DECLARE
+    policy_name TEXT;
+BEGIN
+    FOR policy_name IN 
+        SELECT policyname FROM pg_policies 
+        WHERE tablename = 'objects' AND schemaname = 'storage'
+    LOOP
+        EXECUTE format('DROP POLICY IF EXISTS %I ON storage.objects', policy_name);
+    END LOOP;
+END $$;
+
+-- 3. Create simple, working RLS policies
+CREATE POLICY "Allow all authenticated users to dpr-photos" ON storage.objects
+FOR ALL USING (
+  bucket_id = 'dpr-photos' AND 
+  auth.role() = 'authenticated'
+);
+
+-- 4. Create dpr_photos table if it doesn't exist
 CREATE TABLE IF NOT EXISTS dpr_photos (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
     daily_report_id UUID NOT NULL REFERENCES daily_reports(id) ON DELETE CASCADE,
@@ -15,34 +40,20 @@ CREATE TABLE IF NOT EXISTS dpr_photos (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create indexes for better performance
-CREATE INDEX IF NOT EXISTS idx_dpr_photos_daily_report_id ON dpr_photos(daily_report_id);
-CREATE INDEX IF NOT EXISTS idx_dpr_photos_user_id ON dpr_photos(user_id);
-CREATE INDEX IF NOT EXISTS idx_dpr_photos_created_at ON dpr_photos(created_at);
-
--- Enable Row Level Security
+-- 5. Enable RLS on dpr_photos
 ALTER TABLE dpr_photos ENABLE ROW LEVEL SECURITY;
 
--- Drop existing policies first to avoid conflicts
+-- 6. Drop existing dpr_photos policies
 DROP POLICY IF EXISTS "Users can view their own photos" ON dpr_photos;
 DROP POLICY IF EXISTS "Users can insert their own photos" ON dpr_photos;
 DROP POLICY IF EXISTS "Users can update their own photos" ON dpr_photos;
 DROP POLICY IF EXISTS "Users can delete their own photos" ON dpr_photos;
 
--- Create RLS policies for dpr_photos
-CREATE POLICY "Users can view their own photos" ON dpr_photos
-    FOR SELECT USING (auth.uid() = user_id);
+-- 7. Create dpr_photos RLS policies
+CREATE POLICY "Users can manage their own photos" ON dpr_photos
+FOR ALL USING (auth.uid() = user_id);
 
-CREATE POLICY "Users can insert their own photos" ON dpr_photos
-    FOR INSERT WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "Users can update their own photos" ON dpr_photos
-    FOR UPDATE USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can delete their own photos" ON dpr_photos
-    FOR DELETE USING (auth.uid() = user_id);
-
--- Create function to get photos for a specific report
+-- 8. Create helper functions
 CREATE OR REPLACE FUNCTION get_report_photos(report_id UUID)
 RETURNS TABLE(
     id UUID,
@@ -66,7 +77,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Create function to get all photos for a user
 CREATE OR REPLACE FUNCTION get_user_photos()
 RETURNS TABLE(
     id UUID,

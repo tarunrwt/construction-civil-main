@@ -4,42 +4,17 @@ import { Button } from "@/components/ui/button";
 import { Building2, ArrowLeft, Home, DollarSign, Users, FileText, TrendingUp, Clock, Calendar, Download } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
+import "jspdf-autotable";
 import * as XLSX from "xlsx";
-import { differenceInDays, parseISO } from "date-fns";
-import {
-  LineChart,
-  Line,
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  ScatterChart,
-  Scatter
-} from "recharts";
 
 declare module "jspdf" {
   interface jsPDF {
-    lastAutoTable: {
-      finalY: number;
-    };
+    autoTable: (options: any) => jsPDF;
   }
 }
-
-
 
 interface DailyReport {
   id: string;
@@ -124,16 +99,10 @@ const Reports = () => {
   };
 
   const fetchData = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
     try {
-      let reportsQuery = supabase.from('daily_reports').select('*, projects(name)');
-      reportsQuery = reportsQuery.eq('user_id', user.id).order('report_date', { ascending: false });
-
+      let reportsQuery = supabase.from('daily_reports').select('*, projects(name)').order('report_date', { ascending: false });
       let projectsQuery = supabase.from('projects').select('*');
-      projectsQuery = projectsQuery.eq('user_id', user.id);
-
+      
       if (projectId) {
         reportsQuery = reportsQuery.eq('project_id', projectId);
         projectsQuery = projectsQuery.eq('id', projectId);
@@ -153,8 +122,8 @@ const Reports = () => {
 
       setReports(reportsData);
       calculateStats(reportsData, projectsData);
-      updateStageProgress(reportsData, projectsData, reportsData.slice().reverse());
-    } catch (err: unknown) {
+      updateStageProgress(reportsData);
+    } catch (err: any) {
       console.error('Error fetching data:', err);
     }
   };
@@ -183,48 +152,30 @@ const Reports = () => {
     }
   };
 
-  const updateStageProgress = (reportsData: DailyReport[], projectsData: Project[], reportsAsc: DailyReport[]) => {
-    const latestReport = reportsData.length > 0 ? reportsData[0] : null;
-    const currentStage = latestReport?.stage;
-
-    if (!currentStage) {
+  const updateStageProgress = (reportsData: DailyReport[]) => {
+    if (reportsData.length === 0) {
       setStages(STAGE_LIST.map(name => ({ name, status: "Not Started", progress: 0 })));
       return;
     }
 
+    const latestReport = reportsData[0];
+    const currentStage = latestReport.stage;
+    if (!currentStage) return;
+
     const currentStageIndex = STAGE_LIST.indexOf(currentStage);
+    if (currentStageIndex === -1) return;
 
-    // Dynamic progress for single-project view
-    if (projectId && projectsData.length > 0) {
-        const project = projectsData[0];
-        if (!project.start_date || !project.target_end_date) return;
-
-        const totalDuration = differenceInDays(parseISO(project.target_end_date), parseISO(project.start_date));
-        const durationPerStage = totalDuration / (STAGE_LIST.length - 1);
-
-        const updatedStages = STAGE_LIST.map((name, index) => {
-            if (index < currentStageIndex) return { name, status: "Completed", progress: 100 };
-            if (index > currentStageIndex) return { name, status: "Not Started", progress: 0 };
-
-            // Logic for the current stage
-            const firstReportForCurrentStage = reportsAsc.find(r => r.stage === name);
-            const stageStartDate = firstReportForCurrentStage ? parseISO(firstReportForCurrentStage.report_date) : parseISO(project.start_date);
-            const daysElapsedInStage = differenceInDays(new Date(), stageStartDate);
-
-            let progress = Math.min(99, Math.max(0, (daysElapsedInStage / durationPerStage) * 100));
-            if (currentStage === "Completed") progress = 100;
-
-            return { name, status: currentStage === "Completed" ? "Completed" : "In Progress", progress: Math.round(progress) };
-        });
-        setStages(updatedStages);
-    } else { // Fallback for overall view
-        const updatedStages = STAGE_LIST.map((name, index) => {
-          if (index < currentStageIndex) return { name, status: "Completed", progress: 100 };
-          if (index === currentStageIndex) return { name, status: "In Progress", progress: 50 };
-          return { name, status: "Not Started", progress: 0 };
-        });
-        setStages(updatedStages);
+    if (currentStage === "Completed") {
+      setStages(STAGE_LIST.map(name => ({ name, status: "Completed", progress: 100 })));
+      return;
     }
+
+    const updatedStages = STAGE_LIST.map((name, index) => {
+      if (index < currentStageIndex) return { name, status: "Completed", progress: 100 };
+      if (index === currentStageIndex) return { name, status: "In Progress", progress: 50 };
+      return { name, status: "Not Started", progress: 0 };
+    });
+    setStages(updatedStages);
   };
 
   const handleDownloadPdf = () => {
@@ -256,8 +207,8 @@ const Reports = () => {
       // Financial Overview
       doc.setFontSize(16);
       doc.text('Financial Overview', 15, yPosition);
-
-      autoTable(doc, {
+      
+      doc.autoTable({
         startY: yPosition + 5,
         head: [['Description', 'Amount (₹)']],
         body: [
@@ -270,11 +221,11 @@ const Reports = () => {
       });
 
       // Construction Progress
-      yPosition = doc.lastAutoTable.finalY + 20;
+      yPosition = (doc as any).lastAutoTable.finalY + 20;
       doc.setFontSize(16);
       doc.text('Construction Progress', 15, yPosition);
 
-      autoTable(doc, {
+      doc.autoTable({
         startY: yPosition + 5,
         head: [['Stage', 'Status', 'Progress']],
         body: stages.map(stage => [
@@ -287,16 +238,16 @@ const Reports = () => {
       });
 
       // Project Statistics
-      yPosition = doc.lastAutoTable.finalY + 20;
+      yPosition = (doc as any).lastAutoTable.finalY + 20;
       doc.setFontSize(16);
       doc.text('Project Statistics', 15, yPosition);
 
-      autoTable(doc, {
+      doc.autoTable({
         startY: yPosition + 5,
         head: [['Metric', 'Value']],
         body: [
           ['Total Manpower', stats.totalManpower.toString()],
-          ['Delayed Projects', (stats.delayedProjects || 0).toString()],
+          ['Delayed Projects', stats.delayedProjects.toString()],
           ['Total Reports', reports.length.toString()]
         ],
         headStyles: { fillColor: [41, 128, 185] },
@@ -310,9 +261,9 @@ const Reports = () => {
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(24);
       doc.text('Recent Activities', pageWidth / 2, 25, { align: 'center' });
-
+      
       doc.setTextColor(0, 0, 0);
-      autoTable(doc, {
+      doc.autoTable({
         startY: 50,
         head: [['Date', 'Project', 'Work Done', 'Stage', 'Cost (₹)']],
         body: reports.slice(0, 10).map(report => [
@@ -330,7 +281,7 @@ const Reports = () => {
       });
 
       // Page Numbers
-      const pageCount = doc.internal.pages.length;
+      const pageCount = (doc as any).internal.pages.length;
       for (let i = 1; i <= pageCount; i++) {
         doc.setPage(i);
         doc.setFontSize(10);
@@ -361,7 +312,7 @@ const Reports = () => {
           ['Total Spent (₹)', stats.totalSpent],
           ['Total Budget (₹)', stats.totalBudget],
           ['Total Manpower Days', stats.totalManpower],
-          ['Delayed Projects', (stats.delayedProjects || 0)],
+          ['Delayed Projects', stats.delayedProjects],
           ['Total Reports', reports.length],
         ],
         
@@ -418,34 +369,28 @@ const Reports = () => {
               <Building2 className="h-6 w-6 text-primary-foreground" />
             </div>
             <h1 className="text-2xl font-bold text-foreground">
-              {projectId ? `Report for: ${projectName}` : "Project Reports"}
+              {projectId ? `Report for: ${projectName}` : "Overall Project Reports"}
             </h1>
           </div>
-          <div className="flex gap-2 flex-wrap justify-end">
+          <div className="flex gap-2">
             <Button variant="outline" onClick={handleDownloadPdf}>
-              <Download className="mr-2 h-4 w-4" /> PDF Report
+              <Download className="mr-2 h-4 w-4" />
+              PDF Report
             </Button>
             <Button variant="outline" onClick={handleDownloadExcel}>
-              <Download className="mr-2 h-4 w-4" /> Excel Report
+              <Download className="mr-2 h-4 w-4" />
+              Excel Report
             </Button>
-
-            {/* This button takes you from a specific project back to the main reports list */}
             {projectId && (
               <Button variant="ghost" onClick={() => navigate("/reports")}>
-                <Building2 className="mr-2 h-4 w-4" /> All Reports
+                <Home className="mr-2 h-4 w-4" />
+                All Reports
               </Button>
             )}
-
-            {/* This is the restored Homepage button */}
-            <Button variant="ghost" onClick={() => navigate("/")}>
-                <Home className="mr-2 h-4 w-4" />
-                Homepage
-            </Button>
-
-            {/* This button appears if you are logged in */}
             {isAuthenticated && (
               <Button variant="ghost" onClick={() => navigate("/admin")}>
-                <ArrowLeft className="mr-2 h-4 w-4" /> Dashboard
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Back to Dashboard
               </Button>
             )}
           </div>
@@ -505,179 +450,49 @@ const Reports = () => {
           </Card>
         </div>
 
-        <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="charts">Analytics</TabsTrigger>
-            <TabsTrigger value="reports">Reports</TabsTrigger>
-            <TabsTrigger value="stages">Stages</TabsTrigger>
-          </TabsList>
-
-          {/* Overview Tab */}
-          <TabsContent value="overview" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Cost Trend</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <AreaChart data={reports.slice().reverse().map((report, index) => ({
-                      date: new Date(report.report_date).toLocaleDateString(),
-                      cost: report.cost || 0,
-                      cumulative: reports.slice(0, index + 1).reduce((sum, r) => sum + (r.cost || 0), 0)
-                    }))}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="date" />
-                      <YAxis />
-                      <Tooltip formatter={(value) => [`₹${value.toLocaleString('en-IN')}`, '']} />
-                      <Area type="monotone" dataKey="cost" stroke="#8884d8" fill="#8884d8" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Manpower vs Cost</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <ScatterChart data={reports.map(report => ({
-                      manpower: report.manpower || 0,
-                      cost: report.cost || 0,
-                      date: new Date(report.report_date).toLocaleDateString()
-                    }))}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="manpower" name="Manpower" />
-                      <YAxis dataKey="cost" name="Cost (₹)" />
-                      <Tooltip formatter={(value, name) => [
-                        name === 'cost' ? `₹${value.toLocaleString('en-IN')}` : value,
-                        name === 'cost' ? 'Cost' : 'Manpower'
-                      ]} />
-                      <Scatter dataKey="cost" fill="#8884d8" />
-                    </ScatterChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          {/* Analytics Tab */}
-          <TabsContent value="charts" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Monthly Spending</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={Object.entries(
-                      reports.reduce((acc, report) => {
-                        const month = new Date(report.report_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-                        acc[month] = (acc[month] || 0) + (report.cost || 0);
-                        return acc;
-                      }, {} as Record<string, number>)
-                    ).map(([month, cost]) => ({ month, cost }))}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="month" />
-                      <YAxis />
-                      <Tooltip formatter={(value) => [`₹${value.toLocaleString('en-IN')}`, '']} />
-                      <Bar dataKey="cost" fill="#8884d8" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Weather Impact</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <PieChart>
-                      <Pie
-                        data={Object.entries(
-                          reports.reduce((acc, report) => {
-                            const weather = report.weather || 'Unknown';
-                            acc[weather] = (acc[weather] || 0) + 1;
-                            return acc;
-                          }, {} as Record<string, number>)
-                        ).map(([weather, count]) => ({ weather, count }))}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={({ weather, percent }) => `${weather} ${(percent * 100).toFixed(0)}%`}
-                        outerRadius={80}
-                        fill="#8884d8"
-                        dataKey="count"
-                      >
-                        {Object.entries(
-                          reports.reduce((acc, report) => {
-                            const weather = report.weather || 'Unknown';
-                            acc[weather] = (acc[weather] || 0) + 1;
-                            return acc;
-                          }, {} as Record<string, number>)
-                        ).map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={`hsl(${index * 60}, 70%, 50%)`} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          {/* Reports Tab */}
-          <TabsContent value="reports" className="space-y-6">
-            <div className="bg-card rounded-lg p-6 border border-border">
-              <h2 className="text-xl font-bold text-foreground mb-6">Recent Reports</h2>
-              {reports.length === 0 ? (
-                <p className="text-muted-foreground">No reports submitted yet.</p>
-              ) : (
-                <div className="space-y-4">
-                  {reports.slice(0, 5).map((report) => (
-                    <div key={report.id} className="border border-border rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <h3 className="font-semibold text-foreground">{report.projects?.name || 'Unknown Project'}</h3>
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Calendar className="h-4 w-4" />
-                          {new Date(report.report_date).toLocaleDateString()}
-                        </div>
-                      </div>
-                      <p className="text-sm text-muted-foreground mb-2">{report.work_completed || 'No description'}</p>
-                      <div className="flex items-center gap-4 text-sm">
-                        <span>Weather: {report.weather || 'N/A'}</span>
-                        <span>Manpower: {report.manpower || 0}</span>
-                        <span>Cost: ₹{(report.cost || 0).toLocaleString('en-IN')}</span>
+        <div className="space-y-6">
+          <div className="bg-card rounded-lg p-6 border border-border">
+            <h2 className="text-xl font-bold text-foreground mb-6">Recent Reports</h2>
+            {reports.length === 0 ? (
+              <p className="text-muted-foreground">No reports submitted yet.</p>
+            ) : (
+              <div className="space-y-4">
+                {reports.slice(0, 5).map((report) => (
+                  <div key={report.id} className="border border-border rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="font-semibold text-foreground">{report.projects?.name || 'Unknown Project'}</h3>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Calendar className="h-4 w-4" />
+                        {new Date(report.report_date).toLocaleDateString()}
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </TabsContent>
-
-          {/* Stages Tab */}
-          <TabsContent value="stages" className="space-y-6">
-            <div className="bg-card rounded-lg p-6 border border-border">
-              <h2 className="text-xl font-bold text-foreground mb-6">Project Stages</h2>
-              <div className="space-y-6">
-                {stages.map((stage, index) => (
-                  <div key={index} className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-foreground">{stage.name}</span>
-                      <span className="text-sm text-muted-foreground">{stage.status}</span>
+                    <p className="text-sm text-muted-foreground mb-2">{report.work_completed || 'No description'}</p>
+                    <div className="flex items-center gap-4 text-sm">
+                      <span>Weather: {report.weather || 'N/A'}</span>
+                      <span>Manpower: {report.manpower || 0}</span>
+                      <span>Cost: ₹{(report.cost || 0).toLocaleString('en-IN')}</span>
                     </div>
-                    <Progress value={stage.progress} className="h-2" />
                   </div>
                 ))}
               </div>
+            )}
+          </div>
+
+          <div className="bg-card rounded-lg p-6 border border-border">
+            <h2 className="text-xl font-bold text-foreground mb-6">Project Stages</h2>
+            <div className="space-y-6">
+              {stages.map((stage, index) => (
+                <div key={index} className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-foreground">{stage.name}</span>
+                    <span className="text-sm text-muted-foreground">{stage.status}</span>
+                  </div>
+                  <Progress value={stage.progress} className="h-2" />
+                </div>
+              ))}
             </div>
-          </TabsContent>
-        </Tabs>
+          </div>
+        </div>
       </main>
     </div>
   );

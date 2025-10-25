@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Building2, ArrowLeft, Plus, Calendar, DollarSign } from "lucide-react";
+import { Building2, ArrowLeft, Plus, Calendar, DollarSign, Trash2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
@@ -15,6 +15,17 @@ import {
   DialogDescription,
   DialogClose,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 
@@ -37,6 +48,8 @@ export default function ProjectsPage() {
     target_end_date: "",
     total_cost: "",
   });
+  const [deleteProjectId, setDeleteProjectId] = useState<string | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   useEffect(() => {
     const initialize = async () => {
@@ -55,13 +68,7 @@ export default function ProjectsPage() {
   };
 
   const fetchProjects = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const query = supabase.from("projects").select("*") as any;
-    const { data, error } = await query
-      .eq("user_id", user.id)
-      .order("start_date", { ascending: false });
+    const { data, error } = await supabase.from("projects").select("*").order("start_date", { ascending: false });
     if (error) {
       console.error("Error fetching projects:", error);
       toast.error("Failed to fetch projects. Ensure DB schema includes target_end_date and total_cost.");
@@ -77,12 +84,6 @@ export default function ProjectsPage() {
   };
 
   const handleCreateProject = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      toast.error("You must be logged in to create a project.");
-      return;
-    }
-
     if (!newProject.name || !newProject.start_date) {
       toast.error("Please fill required fields.");
       return;
@@ -90,7 +91,6 @@ export default function ProjectsPage() {
     const payload: any = {
       name: newProject.name,
       start_date: newProject.start_date,
-      user_id: user.id,
     };
     if (newProject.target_end_date) payload.target_end_date = newProject.target_end_date;
     if (newProject.total_cost) payload.total_cost = parseFloat(newProject.total_cost);
@@ -103,6 +103,19 @@ export default function ProjectsPage() {
       setNewProject({ name: "", start_date: "", target_end_date: "", total_cost: "" });
       fetchProjects();
     }
+  };
+
+  const handleDeleteProject = async () => {
+    if (!deleteProjectId) return;
+    const { error } = await supabase.from("projects").delete().eq("id", deleteProjectId);
+    if (error) {
+      toast.error("Error deleting project: " + error.message);
+    } else {
+      toast.success("Project deleted successfully");
+      fetchProjects();
+    }
+    setDeleteDialogOpen(false);
+    setDeleteProjectId(null);
   };
 
   if (loading) {
@@ -208,7 +221,35 @@ export default function ProjectsPage() {
                     <DollarSign className="h-4 w-4" />
                     Total Budget: ₹{project.total_cost ? project.total_cost.toLocaleString("en-IN") : "0"}
                   </div>
-                  <Button variant="outline" className="w-full" onClick={() => navigate(`/reports/${project.id}`)}>View Details</Button>
+                  <div className="flex gap-2">
+                    <Button variant="outline" className="flex-1" onClick={() => navigate(`/reports/${project.id}`)}>View Details</Button>
+                    <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => {
+                            setDeleteProjectId(project.id);
+                            setDeleteDialogOpen(true);
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Delete Project</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Are you sure you want to delete "{project.name}"? This action cannot be undone.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={handleDeleteProject}>Delete</AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
                 </CardContent>
               </Card>
             ))

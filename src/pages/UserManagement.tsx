@@ -7,12 +7,23 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { 
-  Building2, 
-  ArrowLeft, 
-  Users, 
-  UserPlus, 
-  Shield, 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
+  Building2,
+  ArrowLeft,
+  Users,
+  UserPlus,
+  Shield,
   Settings,
   CheckCircle,
   XCircle
@@ -26,12 +37,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import type { Json } from "@/integrations/supabase/types";
 
 interface UserRole {
   id: string;
   name: string;
-  description: string;
-  permissions: string[];
+  description: string | null;
+  permissions: Json;
+  created_at: string;
+  updated_at: string;
 }
 
 interface Project {
@@ -44,7 +58,9 @@ interface UserAssignment {
   user_id: string;
   project_id: string;
   role_id: string;
+  assigned_by: string | null;
   assigned_at: string;
+  created_at: string;
   user_roles: UserRole;
   projects: Project;
 }
@@ -148,7 +164,7 @@ const UserManagement = () => {
 
       const { error } = await supabase
         .from("user_project_assignments")
-        .insert([payload]);
+        .insert(payload);
 
       if (error) throw error;
 
@@ -187,20 +203,24 @@ const UserManagement = () => {
     }
   };
 
-  const getPermissionBadges = (permissions: string[]) => {
-    if (permissions.includes("*")) {
+  const getPermissionBadges = (permissions: Json) => {
+    if (Array.isArray(permissions) && permissions.includes("*")) {
       return <Badge variant="default">Full Access</Badge>;
     }
 
-    return (
-      <div className="flex flex-wrap gap-1">
-        {permissions.map((permission) => (
-          <Badge key={permission} variant="secondary" className="text-xs">
-            {permission.replace(/_/g, " ")}
-          </Badge>
-        ))}
-      </div>
-    );
+    if (Array.isArray(permissions)) {
+      return (
+        <div className="flex flex-wrap gap-1">
+          {permissions.map((permission, index) => (
+            <Badge key={index} variant="secondary" className="text-xs">
+              {typeof permission === 'string' ? permission.replace(/_/g, " ") : String(permission)}
+            </Badge>
+          ))}
+        </div>
+      );
+    }
+
+    return <Badge variant="secondary">No permissions</Badge>;
   };
 
   if (loading) {
@@ -349,13 +369,30 @@ const UserManagement = () => {
                             {new Date(assignment.assigned_at).toLocaleDateString()}
                           </TableCell>
                           <TableCell>
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              onClick={() => handleRemoveAssignment(assignment.id)}
-                            >
-                              <XCircle className="h-4 w-4" />
-                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                >
+                                  <XCircle className="h-4 w-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Remove User Assignment</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Are you sure you want to remove this user assignment? This action cannot be undone.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => handleRemoveAssignment(assignment.id)}>
+                                    Remove
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
                           </TableCell>
                         </TableRow>
                       ))}

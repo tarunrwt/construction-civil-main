@@ -19,6 +19,12 @@ export type Database = {
           work_completed: string | null
           cost: number | null
           stage: string | null
+          cost_category: string | null
+          labor_cost: number | null
+          material_cost: number | null
+          equipment_cost: number | null
+          subcontractor_cost: number | null
+          other_cost: number | null
           user_id: string
           created_at: string
           updated_at: string
@@ -32,6 +38,12 @@ export type Database = {
           work_completed?: string | null
           cost?: number | null
           stage?: string | null
+          cost_category?: string | null
+          labor_cost?: number | null
+          material_cost?: number | null
+          equipment_cost?: number | null
+          subcontractor_cost?: number | null
+          other_cost?: number | null
           user_id: string
           created_at?: string
           updated_at?: string
@@ -45,6 +57,12 @@ export type Database = {
           work_completed?: string | null
           cost?: number | null
           stage?: string | null
+          cost_category?: string | null
+          labor_cost?: number | null
+          material_cost?: number | null
+          equipment_cost?: number | null
+          subcontractor_cost?: number | null
+          other_cost?: number | null
           user_id?: string
           created_at?: string
           updated_at?: string
@@ -58,6 +76,49 @@ export type Database = {
           },
           {
             foreignKeyName: "daily_reports_user_id_fkey"
+            columns: ["user_id"]
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      dpr_photos: {
+        Row: {
+          id: string
+          daily_report_id: string
+          photo_url: string
+          photo_name: string | null
+          photo_description: string | null
+          uploaded_at: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          daily_report_id: string
+          photo_url: string
+          photo_name?: string | null
+          photo_description?: string | null
+          uploaded_at?: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          daily_report_id?: string
+          photo_url?: string
+          photo_name?: string | null
+          photo_description?: string | null
+          uploaded_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dpr_photos_daily_report_id_fkey"
+            columns: ["daily_report_id"]
+            referencedRelation: "daily_reports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dpr_photos_user_id_fkey"
             columns: ["user_id"]
             referencedRelation: "users"
             referencedColumns: ["id"]
@@ -170,6 +231,82 @@ export type Database = {
             referencedColumns: ["id"]
           }
         ]
+      }
+      user_project_assignments: {
+        Row: {
+          id: string
+          user_id: string
+          project_id: string
+          role_id: string
+          assigned_by: string | null
+          assigned_at: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          project_id: string
+          role_id: string
+          assigned_by?: string | null
+          assigned_at?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          project_id?: string
+          role_id?: string
+          assigned_by?: string | null
+          assigned_at?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_project_assignments_project_id_fkey"
+            columns: ["project_id"]
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_project_assignments_role_id_fkey"
+            columns: ["role_id"]
+            referencedRelation: "user_roles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_project_assignments_user_id_fkey"
+            columns: ["user_id"]
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      user_roles: {
+        Row: {
+          id: string
+          name: string
+          description: string | null
+          permissions: Json
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          description?: string | null
+          permissions?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          description?: string | null
+          permissions?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
     }
     Views: {

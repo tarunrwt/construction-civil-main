@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -17,7 +17,37 @@ interface HeaderProps {
 
 const Header = ({ title, showSearch = true, showNotifications = true, children }: HeaderProps) => {
   const navigate = useNavigate();
-  const [notifications] = useState(0); // Placeholder for notifications
+  const [notifications, setNotifications] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchNotificationCount();
+  }, []);
+
+  const fetchNotificationCount = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from("notifications")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("is_read", false);
+
+      if (error) {
+        console.warn("Error fetching notification count:", error);
+        setNotifications(0);
+      } else {
+        setNotifications(data?.length || 0);
+      }
+    } catch (error) {
+      console.warn("Error fetching notification count:", error);
+      setNotifications(0);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSignOut = async () => {
     const { error } = await supabase.auth.signOut();

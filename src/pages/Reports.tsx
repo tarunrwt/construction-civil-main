@@ -254,6 +254,19 @@ const Reports = () => {
 
       let yPosition = 70;
 
+      // Project Summary
+      doc.setFontSize(16);
+      doc.text('Project Summary', 15, yPosition);
+      yPosition += 10;
+      
+      doc.setFontSize(12);
+      doc.text(`Total Projects: ${projects.length}`, 15, yPosition);
+      yPosition += 8;
+      doc.text(`Total Reports: ${reports.length}`, 15, yPosition);
+      yPosition += 8;
+      doc.text(`Total Photos: ${reports.reduce((acc, r) => acc + (r.photos?.length || 0), 0)}`, 15, yPosition);
+      yPosition += 20;
+
       // Financial Overview
       doc.setFontSize(16);
       doc.text('Financial Overview', 15, yPosition);
@@ -264,7 +277,10 @@ const Reports = () => {
         body: [
           ['Total Budget', stats.totalBudget.toLocaleString('en-IN')],
           ['Total Spent', stats.totalSpent.toLocaleString('en-IN')],
-          ['Balance', (stats.totalBudget - stats.totalSpent).toLocaleString('en-IN')]
+          ['Balance', (stats.totalBudget - stats.totalSpent).toLocaleString('en-IN')],
+          ['Average Daily Cost', stats.averageDailyCost.toLocaleString('en-IN')],
+          ['Total Labor Cost', stats.totalLaborCost.toLocaleString('en-IN')],
+          ['Total Material Cost', stats.totalMaterialCost.toLocaleString('en-IN')]
         ],
         headStyles: { fillColor: [41, 128, 185] },
         styles: { fontSize: 12 }

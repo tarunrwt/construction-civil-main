@@ -1,5 +1,5 @@
 import { useNavigate, useParams } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Building2, ArrowLeft, Home, DollarSign, Users, FileText, TrendingUp, Clock, Calendar, Download } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,6 +9,9 @@ import { toast } from "sonner";
 import { jsPDF } from "jspdf";
 import "jspdf-autotable";
 import * as XLSX from "xlsx";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+
 
 declare module "jspdf" {
   interface jsPDF {
@@ -181,177 +184,16 @@ const Reports = () => {
     });
     setStages(updatedStages);
   };
-
-  const handleDownloadPdf = () => {
-    try {
-      const doc = new jsPDF();
-      const pageWidth = doc.internal.pageSize.getWidth();
-      const today = new Date().toLocaleDateString('en-IN', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric'
-      });
-
-      // Header with blue background
-      doc.setFillColor(41, 128, 185);
-      doc.rect(0, 0, pageWidth, 40, 'F');
-
-      // White header text
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(24);
-      doc.text('Construction Project Report', pageWidth / 2, 25, { align: 'center' });
-
-      // Reset to black text
-      doc.setTextColor(0, 0, 0);
-      doc.setFontSize(12);
-      doc.text(`Report Generated: ${today}`, 15, 50);
-
-      let yPosition = 70;
-
-      // Financial Overview
-      doc.setFontSize(16);
-      doc.text('Financial Overview', 15, yPosition);
-      
-      doc.autoTable({
-        startY: yPosition + 5,
-        head: [['Description', 'Amount (₹)']],
-        body: [
-          ['Total Budget', stats.totalBudget.toLocaleString('en-IN')],
-          ['Total Spent', stats.totalSpent.toLocaleString('en-IN')],
-          ['Balance', (stats.totalBudget - stats.totalSpent).toLocaleString('en-IN')]
-        ],
-        headStyles: { fillColor: [41, 128, 185] },
-        styles: { fontSize: 12 }
-      });
-
-      // Construction Progress
-      yPosition = (doc as any).lastAutoTable.finalY + 20;
-      doc.setFontSize(16);
-      doc.text('Construction Progress', 15, yPosition);
-
-      doc.autoTable({
-        startY: yPosition + 5,
-        head: [['Stage', 'Status', 'Progress']],
-        body: stages.map(stage => [
-          stage.name,
-          stage.status,
-          `${stage.progress}%`
-        ]),
-        headStyles: { fillColor: [41, 128, 185] },
-        styles: { fontSize: 12 }
-      });
-
-      // Project Statistics
-      yPosition = (doc as any).lastAutoTable.finalY + 20;
-      doc.setFontSize(16);
-      doc.text('Project Statistics', 15, yPosition);
-
-      doc.autoTable({
-        startY: yPosition + 5,
-        head: [['Metric', 'Value']],
-        body: [
-          ['Total Manpower', stats.totalManpower.toString()],
-          ['Delayed Projects', stats.delayedProjects?.toString() || 'N/A'],
-          ['Total Reports', reports.length.toString()]
-        ],
-        headStyles: { fillColor: [41, 128, 185] },
-        styles: { fontSize: 12 }
-      });
-
-      // Recent Activities on New Page
-      doc.addPage();
-      doc.setFillColor(41, 128, 185);
-      doc.rect(0, 0, pageWidth, 40, 'F');
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(24);
-      doc.text('Recent Activities', pageWidth / 2, 25, { align: 'center' });
-      
-      doc.setTextColor(0, 0, 0);
-      doc.autoTable({
-        startY: 50,
-        head: [['Date', 'Project', 'Work Done', 'Stage', 'Cost (₹)']],
-        body: reports.slice(0, 10).map(report => [
-          new Date(report.report_date).toLocaleDateString('en-IN'),
-          report.projects?.name || 'N/A',
-          report.work_completed || 'N/A',
-          report.stage || 'N/A',
-          (report.cost || 0).toLocaleString('en-IN')
-        ]),
-        headStyles: { fillColor: [41, 128, 185] },
-        styles: { fontSize: 11 },
-        columnStyles: {
-          2: { cellWidth: 80 }
-        }
-      });
-
-      // Page Numbers
-      const pageCount = (doc as any).internal.pages.length;
-      for (let i = 1; i <= pageCount; i++) {
-        doc.setPage(i);
-        doc.setFontSize(10);
-        doc.text(
-          `Page ${i} of ${pageCount}`,
-          pageWidth / 2,
-          doc.internal.pageSize.getHeight() - 10,
-          { align: 'center' }
-        );
-      }
-
-      doc.save(`Construction_Report_${new Date().toISOString().split('T')[0]}.pdf`);
-      toast.success('Report downloaded successfully!');
-    } catch (error) {
-      console.error('Error generating PDF:', error);
-      toast.error('Failed to generate report. Please try again.');
-    }
-  };
-
-  const handleDownloadExcel = () => {
-    try {
-      const worksheets = {
-        Summary: [
-          ['Construction Project Status Report'],
-          ['Generated on:', new Date().toLocaleDateString()],
-          [],
-          ['Metric', 'Value'],
-          ['Total Spent (₹)', stats.totalSpent],
-          ['Total Budget (₹)', stats.totalBudget],
-          ['Total Manpower Days', stats.totalManpower],
-          ['Delayed Projects', stats.delayedProjects],
-          ['Total Reports', reports.length],
-        ],
-        
-        'Project Stages': [
-          ['Stage Name', 'Status', 'Progress (%)'],
-          ...stages.map(s => [s.name, s.status, s.progress]),
-        ],
-        
-        'Recent Reports': [
-          ['Date', 'Project', 'Stage', 'Work Done', 'Manpower', 'Cost (₹)', 'Weather'],
-          ...reports.slice(0, 10).map(r => [
-            new Date(r.report_date).toLocaleDateString(),
-            r.projects?.name || 'N/A',
-            r.stage || 'N/A',
-            r.work_completed || 'N/A',
-            r.manpower || '0',
-            r.cost || '0',
-            r.weather || 'N/A',
-          ]),
-        ],
-      };
-
-      const wb = XLSX.utils.book_new();
-      Object.entries(worksheets).forEach(([name, data]) => {
-        const ws = XLSX.utils.aoa_to_sheet(data as any[][]);
-        XLSX.utils.book_append_sheet(wb, ws, name);
-      });
-
-      XLSX.writeFile(wb, `Construction_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
-      toast.success('Excel report downloaded successfully!');
-    } catch (error) {
-      console.error('Error generating Excel:', error);
-      toast.error('Failed to generate Excel report. Please try again.');
-    }
-  };
+  
+  const chartData = useMemo(() => {
+    return reports
+      .map(report => ({
+        date: new Date(report.report_date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }),
+        cost: report.cost || 0,
+        manpower: report.manpower || 0,
+      }))
+      .reverse(); // reverse to show oldest to newest
+  }, [reports]);
 
   if (loading) {
     return (
@@ -377,11 +219,11 @@ const Reports = () => {
             </h1>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={handleDownloadPdf}>
+            <Button variant="outline">
               <Download className="mr-2 h-4 w-4" />
               PDF Report
             </Button>
-            <Button variant="outline" onClick={handleDownloadExcel}>
+            <Button variant="outline">
               <Download className="mr-2 h-4 w-4" />
               Excel Report
             </Button>
@@ -454,49 +296,112 @@ const Reports = () => {
           </Card>
         </div>
 
-        <div className="space-y-6">
-          <div className="bg-card rounded-lg p-6 border border-border">
-            <h2 className="text-xl font-bold text-foreground mb-6">Recent Reports</h2>
-            {reports.length === 0 ? (
-              <p className="text-muted-foreground">No reports submitted yet.</p>
-            ) : (
-              <div className="space-y-4">
-                {reports.slice(0, 5).map((report) => (
-                  <div key={report.id} className="border border-border rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="font-semibold text-foreground">{report.projects?.name || 'Unknown Project'}</h3>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Calendar className="h-4 w-4" />
-                        {new Date(report.report_date).toLocaleDateString()}
+        <Tabs defaultValue="overview">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="analytics">Analytics</TabsTrigger>
+            <TabsTrigger value="reports">Reports</TabsTrigger>
+            <TabsTrigger value="stages">Stages</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="overview" className="mt-6">
+             <div className="grid md:grid-cols-2 gap-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Cost Trend</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <LineChart data={chartData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="date" />
+                        <YAxis />
+                        <Tooltip />
+                        <Legend />
+                        <Line type="monotone" dataKey="cost" stroke="#8884d8" activeDot={{ r: 8 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Manpower vs Cost</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <BarChart data={chartData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="date" />
+                        <YAxis yAxisId="left" orientation="left" stroke="#8884d8" />
+                        <YAxis yAxisId="right" orientation="right" stroke="#82ca9d" />
+                        <Tooltip />
+                        <Legend />
+                        <Bar yAxisId="left" dataKey="manpower" fill="#8884d8" />
+                        <Bar yAxisId="right" dataKey="cost" fill="#82ca9d" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              </div>
+          </TabsContent>
+
+          <TabsContent value="analytics" className="mt-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Analytics</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p>Detailed analytics will be shown here.</p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="reports" className="mt-6">
+            <div className="bg-card rounded-lg p-6 border border-border">
+              <h2 className="text-xl font-bold text-foreground mb-6">Recent Reports</h2>
+              {reports.length === 0 ? (
+                <p className="text-muted-foreground">No reports submitted yet.</p>
+              ) : (
+                <div className="space-y-4">
+                  {reports.map((report) => (
+                    <div key={report.id} className="border border-border rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="font-semibold text-foreground">{report.projects?.name || 'Unknown Project'}</h3>
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Calendar className="h-4 w-4" />
+                          {new Date(report.report_date).toLocaleDateString()}
+                        </div>
+                      </div>
+                      <p className="text-sm text-muted-foreground mb-2">{report.work_completed || 'No description'}</p>
+                      <div className="flex items-center gap-4 text-sm">
+                        <span>Weather: {report.weather || 'N/A'}</span>
+                        <span>Manpower: {report.manpower || 0}</span>
+                        <span>Cost: ₹{(report.cost || 0).toLocaleString('en-IN')}</span>
                       </div>
                     </div>
-                    <p className="text-sm text-muted-foreground mb-2">{report.work_completed || 'No description'}</p>
-                    <div className="flex items-center gap-4 text-sm">
-                      <span>Weather: {report.weather || 'N/A'}</span>
-                      <span>Manpower: {report.manpower || 0}</span>
-                      <span>Cost: ₹{(report.cost || 0).toLocaleString('en-IN')}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="stages" className="mt-6">
+            <div className="bg-card rounded-lg p-6 border border-border">
+              <h2 className="text-xl font-bold text-foreground mb-6">Project Stages</h2>
+              <div className="space-y-6">
+                {stages.map((stage, index) => (
+                  <div key={index} className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-foreground">{stage.name}</span>
+                      <span className="text-sm text-muted-foreground">{stage.status}</span>
                     </div>
+                    <Progress value={stage.progress} className="h-2" />
                   </div>
                 ))}
               </div>
-            )}
-          </div>
-
-          <div className="bg-card rounded-lg p-6 border border-border">
-            <h2 className="text-xl font-bold text-foreground mb-6">Project Stages</h2>
-            <div className="space-y-6">
-              {stages.map((stage, index) => (
-                <div key={index} className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-foreground">{stage.name}</span>
-                    <span className="text-sm text-muted-foreground">{stage.status}</span>
-                  </div>
-                  <Progress value={stage.progress} className="h-2" />
-                </div>
-              ))}
             </div>
-          </div>
-        </div>
+          </TabsContent>
+        </Tabs>
       </main>
     </div>
   );

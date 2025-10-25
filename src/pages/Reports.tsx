@@ -99,6 +99,7 @@ const Reports = () => {
   const { projectId } = useParams();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [reports, setReports] = useState<DailyReport[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [stats, setStats] = useState<ProjectStats>({
     totalSpent: 0,
     totalBudget: 0,
@@ -153,6 +154,7 @@ const Reports = () => {
       }
 
       setReports(reportsData);
+      setProjects(projectsData);
       calculateStats(reportsData, projectsData);
       updateStageProgress(reportsData, projectsData, reportsData.slice().reverse());
     } catch (err: unknown) {

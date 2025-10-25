@@ -15,6 +15,21 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+const STAGE_LIST = [
+  "Site Preparation",
+  "Excavation",
+  "Foundation Work",
+  "Plinth Work",
+  "Superstructure Work",
+  "Roof Work",
+  "Flooring Work",
+  "Plastering",
+  "Door & Window Work",
+  "Electrical & Plumbing Work",
+  "Painting & Finishing Work",
+  "Completed",
+];
+
 const SubmitDPR = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -22,6 +37,7 @@ const SubmitDPR = () => {
   const [formData, setFormData] = useState({
     projectName: "",
     date: "",
+    stage: "",
     weather: "",
     manpowerCount: "",
     machineryUsed: "",
@@ -60,12 +76,14 @@ const SubmitDPR = () => {
         .from("projects")
         .select("id")
         .eq("name", formData.projectName)
+        .eq("user_id", userId) // Ensure we only find projects owned by the current user
         .single();
 
-      if (projectErr && projectErr.code !== 'PGRST116') throw projectErr;
+      if (projectErr && projectErr.code !== 'PGRST116') throw projectErr; // Ignore "not found" error
 
       let projectId = projectData?.id;
 
+      // If project doesn't exist, create it
       if (!projectId) {
         const { data: newProj, error: newProjErr } = await supabase
           .from("projects")
@@ -79,7 +97,8 @@ const SubmitDPR = () => {
       const payload = {
         project_id: projectId,
         report_date: formData.date,
-        user_id: userId, // Include the user ID
+        user_id: userId,
+        stage: formData.stage,
         weather: formData.weather,
         manpower: parseInt(formData.manpowerCount || "0", 10),
         machinery: formData.machineryUsed,
@@ -147,7 +166,7 @@ const SubmitDPR = () => {
               id="projectName"
               value={formData.projectName}
               onChange={(e) => handleChange("projectName", e.target.value)}
-              placeholder="Enter project name"
+              placeholder="Enter project name (or select existing)"
               required
             />
           </div>
@@ -161,6 +180,25 @@ const SubmitDPR = () => {
               onChange={(e) => handleChange("date", e.target.value)}
               required
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="stage">Project Stage *</Label>
+            <Select
+              value={formData.stage}
+              onValueChange={(value) => handleChange("stage", value)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select the current stage" />
+              </SelectTrigger>
+              <SelectContent>
+                {STAGE_LIST.map((stageName) => (
+                  <SelectItem key={stageName} value={stageName}>
+                    {stageName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-2">

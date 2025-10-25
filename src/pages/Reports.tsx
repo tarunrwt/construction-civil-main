@@ -10,7 +10,7 @@ import { jsPDF } from "jspdf";
 import "jspdf-autotable";
 import * as XLSX from "xlsx";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 
 declare module "jspdf" {
@@ -192,8 +192,30 @@ const Reports = () => {
         cost: report.cost || 0,
         manpower: report.manpower || 0,
       }))
-      .reverse(); // reverse to show oldest to newest
+      .reverse();
   }, [reports]);
+
+  const analyticsData = useMemo(() => {
+    const stageCosts = reports.reduce((acc, report) => {
+      const stage = report.stage || "Uncategorized";
+      acc[stage] = (acc[stage] || 0) + (report.cost || 0);
+      return acc;
+    }, {} as Record<string, number>);
+
+    const stageManpower = reports.reduce((acc, report) => {
+      const stage = report.stage || "Uncategorized";
+      acc[stage] = (acc[stage] || 0) + (report.manpower || 0);
+      return acc;
+    }, {} as Record<string, number>);
+
+    return {
+      costDistribution: Object.entries(stageCosts).map(([name, value]) => ({ name, value })),
+      manpowerByStage: Object.entries(stageManpower).map(([name, manpower]) => ({ name, manpower })),
+    };
+  }, [reports]);
+
+  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
+
 
   if (loading) {
     return (
@@ -227,16 +249,14 @@ const Reports = () => {
               <Download className="mr-2 h-4 w-4" />
               Excel Report
             </Button>
-            {projectId && (
-              <Button variant="ghost" onClick={() => navigate("/reports")}>
+            <Button variant="ghost" onClick={() => navigate("/")}>
                 <Home className="mr-2 h-4 w-4" />
-                All Reports
-              </Button>
-            )}
+                Homepage
+            </Button>
             {isAuthenticated && (
               <Button variant="ghost" onClick={() => navigate("/admin")}>
                 <ArrowLeft className="mr-2 h-4 w-4" />
-                Back to Dashboard
+                Dashboard
               </Button>
             )}
           </div>
@@ -346,14 +366,43 @@ const Reports = () => {
           </TabsContent>
 
           <TabsContent value="analytics" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Analytics</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p>Detailed analytics will be shown here.</p>
-              </CardContent>
-            </Card>
+            <div className="grid md:grid-cols-2 gap-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Stage Cost Distribution</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <PieChart>
+                        <Pie data={analyticsData.costDistribution} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} fill="#8884d8" label>
+                          {analyticsData.costDistribution.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip />
+                        <Legend />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Manpower per Stage</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <BarChart data={analyticsData.manpowerByStage}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" />
+                        <YAxis />
+                        <Tooltip />
+                        <Legend />
+                        <Bar dataKey="manpower" fill="#82ca9d" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              </div>
           </TabsContent>
 
           <TabsContent value="reports" className="mt-6">

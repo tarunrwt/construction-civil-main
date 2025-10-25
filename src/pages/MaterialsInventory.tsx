@@ -335,7 +335,16 @@ const MaterialsInventory = () => {
   const filteredMaterials = materials.filter((material) => {
     const matchesSearch = material.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          material.description.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = selectedCategory === "all" || material.category === selectedCategory;
+    
+    let matchesCategory = false;
+    if (selectedCategory === "all") {
+      matchesCategory = true;
+    } else if (selectedCategory === "low-stock") {
+      matchesCategory = material.current_stock <= material.min_stock_level;
+    } else {
+      matchesCategory = material.category === selectedCategory;
+    }
+    
     return matchesSearch && matchesCategory;
   });
 
@@ -375,14 +384,26 @@ const MaterialsInventory = () => {
           <Alert className="mb-6 border-orange-200 bg-orange-50">
             <AlertTriangle className="h-4 w-4 text-orange-600" />
             <AlertDescription className="text-orange-800">
-              <strong>Low Stock Alert:</strong> {lowStockMaterials.length} material(s) are below minimum stock level.
-              <Button 
-                variant="link" 
-                className="text-orange-600 p-0 h-auto ml-2"
-                onClick={() => setSelectedCategory("low-stock")}
-              >
-                View Details
-              </Button>
+              <div className="flex items-center justify-between">
+                <div>
+                  <strong>Low Stock Alert:</strong> {lowStockMaterials.length} material(s) are below minimum stock level.
+                  <Button 
+                    variant="link" 
+                    className="text-orange-600 p-0 h-auto ml-2"
+                    onClick={() => setSelectedCategory("low-stock")}
+                  >
+                    View Details
+                  </Button>
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  className="text-orange-600 hover:text-orange-700"
+                  onClick={() => setLowStockMaterials([])}
+                >
+                  Dismiss
+                </Button>
+              </div>
             </AlertDescription>
           </Alert>
         )}
@@ -414,6 +435,7 @@ const MaterialsInventory = () => {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Categories</SelectItem>
+                    <SelectItem value="low-stock">Low Stock</SelectItem>
                     {materialCategories.map((category) => (
                       <SelectItem key={category} value={category}>
                         {category}

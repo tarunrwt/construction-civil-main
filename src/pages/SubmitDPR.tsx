@@ -232,10 +232,29 @@ const SubmitDPR = () => {
             photo.description
           );
 
-          // Note: dpr_photos table needs to be created in schema
-          // For now, skip photo upload or use a different approach
-          console.log("Photo upload skipped - dpr_photos table not in schema");
-          return Promise.resolve({ data: null, error: null });
+          // Save photo reference to database
+          // Note: This will work after applying complete_photo_system.sql
+          try {
+            const { error: photoError } = await supabase
+              .from("dpr_photos" as any)
+              .insert([{
+                daily_report_id: reportData.id,
+                user_id: session.user.id,
+                file_name: name,
+                file_path: `dpr-photos/${name}`,
+                public_url: url,
+                description: photo.description,
+                file_size: photo.file.size,
+                mime_type: photo.file.type
+              }]);
+
+            if (photoError) {
+              console.warn("Photo metadata not saved - dpr_photos table may not exist yet:", photoError);
+            }
+          } catch (error) {
+            console.warn("Photo metadata not saved - dpr_photos table may not exist yet:", error);
+          }
+          return { data: { url, name }, error: null };
         });
 
         await Promise.all(photoPromises);

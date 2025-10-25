@@ -1,7 +1,7 @@
 import { useNavigate, useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Building2, ArrowLeft, Home, DollarSign, Users, FileText, TrendingUp, Clock, Calendar, Download } from "lucide-react";
+import { Building2, ArrowLeft, Home, DollarSign, Users, FileText, TrendingUp, Clock, Calendar, Download, ImageIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -11,6 +11,7 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 import { differenceInDays, parseISO } from "date-fns";
+import PhotoGallery from "@/components/PhotoGallery";
 import {
   LineChart,
   Line,
@@ -506,10 +507,11 @@ const Reports = () => {
         </div>
 
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="charts">Analytics</TabsTrigger>
             <TabsTrigger value="reports">Reports</TabsTrigger>
+            <TabsTrigger value="photos">Photos</TabsTrigger>
             <TabsTrigger value="stages">Stages</TabsTrigger>
           </TabsList>
 
@@ -657,6 +659,17 @@ const Reports = () => {
                   ))}
                 </div>
               )}
+            </div>
+          </TabsContent>
+
+          {/* Photos Tab */}
+          <TabsContent value="photos" className="space-y-6">
+            <div className="bg-card rounded-lg p-6 border border-border">
+              <h2 className="text-xl font-bold text-foreground mb-6 flex items-center gap-2">
+                <ImageIcon className="h-5 w-5" />
+                Progress Photos
+              </h2>
+              <PhotoGallery showAll={true} />
             </div>
           </TabsContent>
 

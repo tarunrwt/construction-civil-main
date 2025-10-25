@@ -25,6 +25,15 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error('ErrorBoundary caught an error:', error, errorInfo);
+    
+    // If it's a stack overflow error, try to reset the component state
+    if (error.name === 'RangeError' && error.message.includes('Maximum call stack size exceeded')) {
+      console.warn('Stack overflow detected, attempting to reset component state');
+      // Force a complete page reload for stack overflow errors
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    }
   }
 
   resetError = () => {

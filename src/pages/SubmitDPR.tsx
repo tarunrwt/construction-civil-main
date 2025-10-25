@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -252,23 +252,34 @@ const SubmitDPR = () => {
     }
   };
 
-  const calculateTotalCost = () => {
-    const labor = Number(form.watch("laborCost")) || 0;
-    const material = Number(form.watch("materialCost")) || 0;
-    const equipment = Number(form.watch("equipmentCost")) || 0;
-    const subcontractor = Number(form.watch("subcontractorCost")) || 0;
-    const other = Number(form.watch("otherCost")) || 0;
+  const calculateTotalCost = useCallback(() => {
+    const labor = Number(form.getValues("laborCost")) || 0;
+    const material = Number(form.getValues("materialCost")) || 0;
+    const equipment = Number(form.getValues("equipmentCost")) || 0;
+    const subcontractor = Number(form.getValues("subcontractorCost")) || 0;
+    const other = Number(form.getValues("otherCost")) || 0;
     const total = labor + material + equipment + subcontractor + other;
-    form.setValue("cost", total.toString());
+    
+    // Only update if the value has actually changed to prevent infinite loops
+    const currentCost = form.getValues("cost");
+    if (currentCost !== total.toString()) {
+      form.setValue("cost", total.toString());
+    }
     return total;
-  };
+  }, [form]);
 
   useEffect(() => {
-    const subscription = form.watch(() => {
-      calculateTotalCost();
+    const subscription = form.watch((value, { name }) => {
+      // Only recalculate if cost-related fields change, not when cost itself changes
+      if (name && ['laborCost', 'materialCost', 'equipmentCost', 'subcontractorCost', 'otherCost'].includes(name)) {
+        // Use setTimeout to break the synchronous call chain
+        setTimeout(() => {
+          calculateTotalCost();
+        }, 0);
+      }
     });
     return () => subscription.unsubscribe();
-  }, [form]);
+  }, [form, calculateTotalCost]);
 
   if (loading) {
     return (

@@ -22,7 +22,11 @@ interface DailyReport {
   report_date: string;
   weather: string | null;
   manpower: number | null;
+  machinery?: string | null;
   work_completed: string | null;
+  materials_used?: string | null;
+  safety_incidents?: string | null;
+  remarks?: string | null;
   cost: number | null;
   stage: string | null;
   projects: {
@@ -247,7 +251,7 @@ const Reports = () => {
         head: [['Metric', 'Value']],
         body: [
           ['Total Manpower', stats.totalManpower.toString()],
-          ['Delayed Projects', stats.delayedProjects.toString()],
+          ['Delayed Projects', stats.delayedProjects?.toString() || 'N/A'],
           ['Total Reports', reports.length.toString()]
         ],
         headStyles: { fillColor: [41, 128, 185] },
@@ -337,7 +341,7 @@ const Reports = () => {
 
       const wb = XLSX.utils.book_new();
       Object.entries(worksheets).forEach(([name, data]) => {
-        const ws = XLSX.utils.aoa_to_sheet(data);
+        const ws = XLSX.utils.aoa_to_sheet(data as any[][]);
         XLSX.utils.book_append_sheet(wb, ws, name);
       });
 

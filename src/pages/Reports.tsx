@@ -438,65 +438,6 @@ const Reports = () => {
     }
   };
 
-      autoTable(doc, {
-        startY: yPosition + 5,
-        head: [['Metric', 'Value']],
-        body: [
-          ['Total Manpower', stats.totalManpower.toString()],
-          ['Delayed Projects', (stats.delayedProjects || 0).toString()],
-          ['Total Reports', reports.length.toString()]
-        ],
-        headStyles: { fillColor: [41, 128, 185] },
-        styles: { fontSize: 12 }
-      });
-
-      // Recent Activities on New Page
-      doc.addPage();
-      doc.setFillColor(41, 128, 185);
-      doc.rect(0, 0, pageWidth, 40, 'F');
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(24);
-      doc.text('Recent Activities', pageWidth / 2, 25, { align: 'center' });
-
-      doc.setTextColor(0, 0, 0);
-      autoTable(doc, {
-        startY: 50,
-        head: [['Date', 'Project', 'Work Done', 'Stage', 'Cost (₹)']],
-        body: reports.slice(0, 10).map(report => [
-          new Date(report.report_date).toLocaleDateString('en-IN'),
-          report.projects?.name || 'N/A',
-          report.work_completed || 'N/A',
-          report.stage || 'N/A',
-          (report.cost || 0).toLocaleString('en-IN')
-        ]),
-        headStyles: { fillColor: [41, 128, 185] },
-        styles: { fontSize: 11 },
-        columnStyles: {
-          2: { cellWidth: 80 }
-        }
-      });
-
-      // Page Numbers
-      const pageCount = doc.internal.pages.length;
-      for (let i = 1; i <= pageCount; i++) {
-        doc.setPage(i);
-        doc.setFontSize(10);
-        doc.text(
-          `Page ${i} of ${pageCount}`,
-          pageWidth / 2,
-          doc.internal.pageSize.getHeight() - 10,
-          { align: 'center' }
-        );
-      }
-
-      doc.save(`Construction_Report_${new Date().toISOString().split('T')[0]}.pdf`);
-      toast.success('Report downloaded successfully!');
-    } catch (error) {
-      console.error('Error generating PDF:', error);
-      toast.error('Failed to generate report. Please try again.');
-    }
-  };
-
   const handleDownloadExcel = () => {
     try {
       const worksheets = {

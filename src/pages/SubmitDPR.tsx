@@ -73,11 +73,7 @@ const SubmitDPR = () => {
   };
 
   const fetchProjects = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const query = supabase.from("projects").select("id, name") as any;
-    const { data, error } = await query.eq("user_id", user.id);
+    const { data, error } = await supabase.from("projects").select("id, name");
     if (error) {
       toast.error("Could not fetch projects.");
     } else {
@@ -86,14 +82,18 @@ const SubmitDPR = () => {
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      toast.error("You must be logged in to submit a report.");
-      return;
-    }
-
     e.preventDefault();
     setLoading(true);
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session) {
+      toast.error("You must be logged in to submit a report.");
+      setLoading(false);
+      return;
+    }
 
     try {
       const payload = {
@@ -101,14 +101,10 @@ const SubmitDPR = () => {
         report_date: formData.date,
         weather: formData.weather,
         manpower: parseInt(formData.manpowerCount || "0", 10),
-        machinery: formData.machineryUsed,
         work_completed: formData.workCompleted,
-        materials_used: formData.materialUsed,
-        safety_incidents: formData.safetyIncidents,
-        remarks: formData.remarks,
         cost: parseFloat(formData.cost || "0"),
         stage: formData.stage,
-        user_id: user.id,
+        user_id: session.user.id,
       };
 
       const { error: insertErr } = await supabase.from("daily_reports").insert([payload]);
@@ -117,9 +113,10 @@ const SubmitDPR = () => {
 
       toast.success("DPR submitted successfully!");
       navigate("/admin");
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      toast.error("Error submitting report: " + (err.message || JSON.stringify(err)));
+      const errorMessage = err instanceof Error ? err.message : JSON.stringify(err);
+      toast.error("Error submitting report: " + errorMessage);
     } finally {
       setLoading(false);
     }

@@ -108,7 +108,7 @@ const UserManagement = () => {
 
       if (projectsError) throw projectsError;
 
-      // Fetch user assignments
+      // Fetch user assignments - ONLY for current user
       const { data: assignmentsData, error: assignmentsError } = await supabase
         .from("user_project_assignments")
         .select(`
@@ -120,6 +120,7 @@ const UserManagement = () => {
           user_roles(id, name, description, permissions),
           projects(id, name)
         `)
+        .eq("user_id", user.id)  // CRITICAL: Only show current user's assignments
         .order("assigned_at", { ascending: false });
 
       if (assignmentsError) throw assignmentsError;

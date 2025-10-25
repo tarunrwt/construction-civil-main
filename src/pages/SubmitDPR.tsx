@@ -163,13 +163,16 @@ const SubmitDPR = () => {
   const uploadPhotoToStorage = async (file: File, reportId: string, description: string) => {
     const fileExt = file.name.split('.').pop();
     const fileName = `${reportId}_${Date.now()}.${fileExt}`;
-    const filePath = `dpr-photos/${fileName}`;
+    const filePath = fileName; // Don't include dpr-photos/ in the path
 
     const { error: uploadError } = await supabase.storage
       .from('dpr-photos')
       .upload(filePath, file);
 
-    if (uploadError) throw uploadError;
+    if (uploadError) {
+      console.error("Storage upload error:", uploadError);
+      throw uploadError;
+    }
 
     const { data: { publicUrl } } = supabase.storage
       .from('dpr-photos')

@@ -69,6 +69,9 @@ interface ProjectStats {
   totalSpent: number;
   totalBudget: number;
   totalManpower: number;
+  averageDailyCost: number;
+  totalLaborCost: number;
+  totalMaterialCost: number;
   delayedProjects?: number;
   timeStatus?: string;
 }
@@ -103,7 +106,10 @@ const Reports = () => {
   const [stats, setStats] = useState<ProjectStats>({
     totalSpent: 0,
     totalBudget: 0,
-    totalManpower: 0
+    totalManpower: 0,
+    averageDailyCost: 0,
+    totalLaborCost: 0,
+    totalMaterialCost: 0
   });
   const [loading, setLoading] = useState(true);
   const [projectName, setProjectName] = useState("Overall");
@@ -166,6 +172,9 @@ const Reports = () => {
     const totalSpent = reportsData.reduce((sum, report) => sum + (report.cost || 0), 0);
     const totalBudget = projectsData.reduce((sum, project) => sum + (project.total_cost || 0), 0);
     const totalManpower = reportsData.reduce((sum, report) => sum + (report.manpower || 0), 0);
+    const averageDailyCost = reportsData.length > 0 ? totalSpent / reportsData.length : 0;
+    const totalLaborCost = reportsData.reduce((sum, report) => sum + (report.labor_cost || 0), 0);
+    const totalMaterialCost = reportsData.reduce((sum, report) => sum + (report.material_cost || 0), 0);
 
     if (projectId && projectsData.length > 0) {
       const project = projectsData[0];
@@ -177,12 +186,12 @@ const Reports = () => {
         const daysDiff = Math.floor((targetDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
         timeStatus = daysDiff >= 0 ? `${daysDiff} Days Remaining` : `${Math.abs(daysDiff)} Days Overdue`;
       }
-      setStats({ totalSpent, totalBudget, totalManpower, timeStatus });
+      setStats({ totalSpent, totalBudget, totalManpower, averageDailyCost, totalLaborCost, totalMaterialCost, timeStatus });
     } else {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const delayedProjects = projectsData.filter(p => p.target_end_date && new Date(p.target_end_date) < today).length;
-      setStats({ totalSpent, totalBudget, totalManpower, delayedProjects });
+      setStats({ totalSpent, totalBudget, totalManpower, averageDailyCost, totalLaborCost, totalMaterialCost, delayedProjects });
     }
   };
 
@@ -295,12 +304,12 @@ const Reports = () => {
         startY: yPosition + 8,
         head: [['Financial Metric', 'Amount (₹)', 'Percentage']],
         body: [
-          ['Total Budget', stats.totalBudget.toLocaleString('en-IN'), '100%'],
-          ['Total Spent', stats.totalSpent.toLocaleString('en-IN'), `${((stats.totalSpent / stats.totalBudget) * 100).toFixed(1)}%`],
-          ['Remaining Budget', (stats.totalBudget - stats.totalSpent).toLocaleString('en-IN'), `${(((stats.totalBudget - stats.totalSpent) / stats.totalBudget) * 100).toFixed(1)}%`],
-          ['Average Daily Cost', stats.averageDailyCost.toLocaleString('en-IN'), '-'],
-          ['Total Labor Cost', stats.totalLaborCost.toLocaleString('en-IN'), `${((stats.totalLaborCost / stats.totalSpent) * 100).toFixed(1)}%`],
-          ['Total Material Cost', stats.totalMaterialCost.toLocaleString('en-IN'), `${((stats.totalMaterialCost / stats.totalSpent) * 100).toFixed(1)}%`]
+          ['Total Budget', (stats.totalBudget || 0).toLocaleString('en-IN'), '100%'],
+          ['Total Spent', (stats.totalSpent || 0).toLocaleString('en-IN'), `${stats.totalBudget ? ((stats.totalSpent || 0) / stats.totalBudget * 100).toFixed(1) : '0'}%`],
+          ['Remaining Budget', ((stats.totalBudget || 0) - (stats.totalSpent || 0)).toLocaleString('en-IN'), `${stats.totalBudget ? (((stats.totalBudget - (stats.totalSpent || 0)) / stats.totalBudget) * 100).toFixed(1) : '0'}%`],
+          ['Average Daily Cost', (stats.averageDailyCost || 0).toLocaleString('en-IN'), '-'],
+          ['Total Labor Cost', (stats.totalLaborCost || 0).toLocaleString('en-IN'), `${stats.totalSpent ? (((stats.totalLaborCost || 0) / stats.totalSpent) * 100).toFixed(1) : '0'}%`],
+          ['Total Material Cost', (stats.totalMaterialCost || 0).toLocaleString('en-IN'), `${stats.totalSpent ? (((stats.totalMaterialCost || 0) / stats.totalSpent) * 100).toFixed(1) : '0'}%`]
         ],
         headStyles: { 
           fillColor: [41, 128, 185],
@@ -550,7 +559,7 @@ const Reports = () => {
               <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">₹{stats.totalSpent.toLocaleString('en-IN')}</div>
+              <div className="text-2xl font-bold">₹{(stats.totalSpent || 0).toLocaleString('en-IN')}</div>
             </CardContent>
           </Card>
           
@@ -560,7 +569,7 @@ const Reports = () => {
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">₹{stats.totalBudget.toLocaleString('en-IN')}</div>
+              <div className="text-2xl font-bold">₹{(stats.totalBudget || 0).toLocaleString('en-IN')}</div>
             </CardContent>
           </Card>
 

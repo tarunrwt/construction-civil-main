@@ -123,11 +123,16 @@ const UserManagement = () => {
         .eq("user_id", user.id)  // CRITICAL: Only show current user's assignments
         .order("assigned_at", { ascending: false });
 
-      if (assignmentsError) throw assignmentsError;
+      if (assignmentsError) {
+        console.warn("Error fetching assignments:", assignmentsError);
+        // Don't throw error, just set empty array
+        setAssignments([]);
+      } else {
+        setAssignments(assignmentsData || []);
+      }
 
       setUserRoles(rolesData || []);
       setProjects(projectsData || []);
-      setAssignments(assignmentsData || []);
 
     } catch (error) {
       console.error("Error fetching data:", error);

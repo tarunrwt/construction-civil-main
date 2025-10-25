@@ -34,23 +34,35 @@ const Notifications = () => {
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
-    fetchNotifications();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
     
-    // Set up real-time subscription for notifications
-    const channel = supabase
-      .channel('notifications')
-      .on('postgres_changes', 
-        { event: 'INSERT', schema: 'public', table: 'notifications' },
-        (payload) => {
-          if (payload.new.user_id === supabase.auth.getUser().then(u => u.data.user?.id)) {
-            fetchNotifications();
+    const setupNotifications = async () => {
+      await fetchNotifications();
+      
+      // Get current user ID for comparison
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      
+      // Set up real-time subscription for notifications
+      channel = supabase
+        .channel('notifications')
+        .on('postgres_changes', 
+          { event: 'INSERT', schema: 'public', table: 'notifications' },
+          (payload) => {
+            if (payload.new.user_id === user.id) {
+              fetchNotifications();
+            }
           }
-        }
-      )
-      .subscribe();
+        )
+        .subscribe();
+    };
 
+    setupNotifications();
+    
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, []);
 

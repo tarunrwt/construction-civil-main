@@ -31,7 +31,7 @@ interface UserRole {
   id: string;
   name: string;
   description: string | null;
-  permissions: any; // JSONB from Supabase
+  permissions: string[] | string; // JSONB from Supabase
 }
 
 interface Project {
@@ -94,7 +94,7 @@ const UserManagement = () => {
       // Fetch user roles
       const { data: rolesData, error: rolesError } = await supabase
         .from("user_roles")
-        .select("*")
+        .select("id, name, description, permissions")
         .order("name");
 
       if (rolesError) throw rolesError;
@@ -112,9 +112,13 @@ const UserManagement = () => {
       const { data: assignmentsData, error: assignmentsError } = await supabase
         .from("user_project_assignments")
         .select(`
-          *,
-          user_roles(*),
-          projects(*)
+          id,
+          user_id,
+          project_id,
+          role_id,
+          assigned_at,
+          user_roles(id, name, description, permissions),
+          projects(id, name)
         `)
         .order("assigned_at", { ascending: false });
 
@@ -187,7 +191,7 @@ const UserManagement = () => {
     }
   };
 
-  const getPermissionBadges = (permissions: any) => {
+  const getPermissionBadges = (permissions: string[] | string) => {
     const perms = Array.isArray(permissions) ? permissions : [];
     if (perms.includes("*")) {
       return <Badge variant="default">Full Access</Badge>;

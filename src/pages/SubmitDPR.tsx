@@ -83,18 +83,16 @@ const executionStagesForUpperFloors = [
 const dprSchema = z.object({
   projectId: z.string().min(1, "Please select a project"),
   date: z.string().min(1, "Please select a date"),
-  stage: z.string().min(1, "Please select the current stage"),
-  workCompleted: z.string().min(1, "Please describe the work completed"),
-
-  // The rest are now optional (will not block submission)
-  weather: z.string().optional(),
+  weather: z.string().min(1, "Please enter weather conditions"),
   manpowerCount: z.string().optional(),
   machineryUsed: z.string().optional(),
+  workCompleted: z.string().min(1, "Please describe the work completed"),
   materialUsed: z.string().optional(),
   safetyIncidents: z.string().optional(),
   remarks: z.string().optional(),
-  floor: z.string().optional(),    // no required_error here!
-  cost: z.string().optional(),
+  floor: z.enum(["ground", "first", "other"], { required_error: "Please select a floor first." }),
+  stage: z.string().min(1, "Please select the current stage"),
+  cost: z.string().refine((val) => !isNaN(Number(val)) && Number(val) >= 0, "Must be a valid number"),
   laborCost: z.string().optional(),
   materialCost: z.string().optional(),
   equipmentCost: z.string().optional(),
@@ -122,7 +120,6 @@ const SubmitDPR = () => {
   const [photos, setPhotos] = useState<PhotoFile[]>([]);
   const [stageSelectionView, setStageSelectionView] = useState<"floor" | "stage">("floor");
 
-  // PATCH: Simplify required fields, only main business fields are required
   const form = useForm<DPRFormData>({
     resolver: zodResolver(dprSchema),
     defaultValues: {
@@ -135,7 +132,7 @@ const SubmitDPR = () => {
       materialUsed: "",
       safetyIncidents: "",
       remarks: "",
-      floor: "",
+      floor: undefined,
       stage: "",
       cost: "0",
       laborCost: "",
@@ -200,15 +197,20 @@ const SubmitDPR = () => {
 
   // Type-safe total calculation
   const calculateTotalCost = useCallback(() => {
-    const isLayoutStage = !!form.getValues("stage") && form.getValues("stage").startsWith("Layout/Plan/Drawings");
-    const fields: (keyof DPRFormData)[] = isLayoutStage
-      ? ["laborCost", "otherCost"]
-      : ["laborCost", "materialCost", "equipmentCost", "subcontractorCost", "otherCost"];
+    const fields: (keyof DPRFormData)[] = [
+      "laborCost",
+      "materialCost",
+      "equipmentCost",
+      "subcontractorCost",
+      "otherCost",
+    ];
+
     const total = fields.reduce((sum, key) => {
       const raw = form.getValues(key);
       const n = Number(raw || 0);
       return sum + (isNaN(n) ? 0 : n);
     }, 0);
+
     form.setValue("cost", total.toString(), { shouldValidate: true });
     return total;
   }, [form]);
@@ -234,56 +236,51 @@ const SubmitDPR = () => {
   // helper: is a layout stage (we check full prefix to be safe)
   const isLayoutStage = !!selectedStage && selectedStage.startsWith("Layout/Plan/Drawings");
 
-  /** SUBMIT HANDLER: called after validation **/
+  // submit
   const onSubmit = async (data: DPRFormData) => {
-    console.log("onSubmit called, form data:", data);
     setLoading(true);
-    const { data: { session } } = await supabase.auth.getSession();
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
     if (!session) {
       toast.error("You must be logged in to submit a report.");
       setLoading(false);
       return;
     }
+
     try {
-      const isLayoutStage = data.stage?.startsWith("Layout/Plan/Drawings");
-      // Calculate total per stage
-      let total = 0;
-      if (isLayoutStage) {
-        total = parseFloat(data.laborCost || "0") + parseFloat(data.otherCost || "0");
-      } else {
-        total =
-          parseFloat(data.laborCost || "0") +
-          parseFloat(data.materialCost || "0") +
-          parseFloat(data.equipmentCost || "0") +
-          parseFloat(data.subcontractorCost || "0") +
-          parseFloat(data.otherCost || "0");
-      }
-      // PATCH: Always submit the calculated total as 'cost' DB field
-      const payload: any = {
+      // If layout stage, ensure the fields we do not use are zeroed/empty to avoid bad DB values
+      const payload = {
         project_id: data.projectId,
         report_date: data.date,
-        stage: data.stage,
+        weather: data.weather,
+        manpower_count: data.manpowerCount ? parseInt(data.manpowerCount, 10) : null,
         work_completed: data.workCompleted,
+        cost: parseFloat(data.cost || "0"),
+        floor: data.floor,
+        stage: data.stage,
+        labor_cost: parseFloat(data.laborCost || "0"),
+        material_cost: parseFloat(data.materialCost || "0"),
+        equipment_cost: parseFloat(data.equipmentCost || "0"),
+        subcontractor_cost: parseFloat(data.subcontractorCost || "0"),
+        other_cost: parseFloat(data.otherCost || "0"),
         user_id: session.user.id,
-        cost: total,
+        machinery_used: data.machineryUsed || null,
+        materials_used: data.materialUsed || null,
+        safety_incidents: data.safetyIncidents || null,
+        remarks: data.remarks || null,
       };
-      if (isLayoutStage) {
-        payload.labor_cost = parseFloat(data.laborCost || "0"); // Architect Cost
-        payload.other_cost = parseFloat(data.otherCost || "0");
-      } else {
-        payload.labor_cost = parseFloat(data.laborCost || "0");
-        payload.material_cost = parseFloat(data.materialCost || "0");
-        payload.equipment_cost = parseFloat(data.equipmentCost || "0");
-        payload.subcontractor_cost = parseFloat(data.subcontractorCost || "0");
-        payload.other_cost = parseFloat(data.otherCost || "0");
-      }
+
       const { data: reportData, error: insertErr } = await supabase
         .from("daily_reports")
         .insert([payload])
         .select()
         .single();
+
       if (insertErr) throw insertErr;
-      // Photos logic unchanged
+
       if (photos.length > 0) {
         await Promise.all(
           photos.map(async (photo) => {
@@ -298,20 +295,19 @@ const SubmitDPR = () => {
                 description: photo.description,
                 file_size: photo.file.size,
                 mime_type: photo.file.type,
-              }
+              },
             ]);
           })
         );
       }
+
       toast.success("DPR submitted successfully!");
       navigate("/admin");
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : JSON.stringify(err);
       toast.error("Error submitting report: " + errorMessage);
-      console.error("DPR submit error:", err);
     } finally {
       setLoading(false);
-      console.log("Submit loading=false");
     }
   };
 
@@ -344,17 +340,7 @@ const SubmitDPR = () => {
 
       <main className="container mx-auto px-4 py-8 max-w-3xl">
         <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit(
-              onSubmit,
-              (errors) => {
-                window.scrollTo({ top: 0, behavior: 'smooth' }); // highlight errors
-                toast.error('Please fill all required fields correctly.');
-                console.error('Form validation errors:', errors);
-              }
-            )}
-            className="bg-card rounded-lg p-8 border border-border space-y-6"
-          >
+          <form onSubmit={form.handleSubmit(onSubmit)} className="bg-card rounded-lg p-8 border border-border space-y-6">
             {/* Project */}
             <FormField
               control={form.control}
@@ -488,7 +474,7 @@ const SubmitDPR = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {isLayoutStage ? (
                     <>
-                      {/* Only Architect Cost and Other Cost for layout stages */}
+                      {/* Architect cost (mapped to laborCost in the form / labor_cost in DB) */}
                       <FormField control={form.control} name="laborCost" render={({ field }) => (
                         <FormItem>
                           <FormLabel>Architect Cost (₹)</FormLabel>
@@ -510,7 +496,6 @@ const SubmitDPR = () => {
                     </>
                   ) : (
                     <>
-                      {/* Full breakdown for non-layout stages */}
                       <FormField control={form.control} name="laborCost" render={({ field }) => (
                         <FormItem>
                           <FormLabel>Labor Cost (₹)</FormLabel>
@@ -558,7 +543,7 @@ const SubmitDPR = () => {
                       )} />
                     </>
                   )}
-                  {/* Total cost unchanged */}
+
                   <div className="space-y-2">
                     <Label>Total Cost (₹)</Label>
                     <div className="p-2 bg-muted rounded-md font-semibold">
@@ -572,7 +557,45 @@ const SubmitDPR = () => {
             {/* Conditionally hide execution-specific fields for layout stages */}
             {!isLayoutStage && (
               <>
-                {/* Removed manpowerCount, machineryUsed, materialUsed, safetyIncidents */}
+                <FormField control={form.control} name="manpowerCount" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Manpower Count</FormLabel>
+                    <FormControl>
+                      <Input type="number" placeholder="Enter number of workers" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+
+                <FormField control={form.control} name="machineryUsed" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Machinery Used</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g., Crane, Excavator, Mixer" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+
+                <FormField control={form.control} name="materialUsed" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Materials Used</FormLabel>
+                    <FormControl>
+                      <Textarea placeholder="List materials used" rows={3} {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+
+                <FormField control={form.control} name="safetyIncidents" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Safety Incidents</FormLabel>
+                    <FormControl>
+                      <Textarea placeholder="Report any safety incidents" rows={3} {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
               </>
             )}
 

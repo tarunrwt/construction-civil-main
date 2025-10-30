@@ -1,0 +1,766 @@
+import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Building2, ArrowLeft, Upload, X, Camera, IndianRupee } from "lucide-react";
+import { toast } from "sonner";
+import { supabase } from "@/lib/supabase";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  SelectGroup,
+  SelectLabel,
+} from "@/components/ui/select";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+
+const allProjectStages = [
+  "Layout/Plan/Drawings - Site Plan",
+  "Layout/Plan/Drawings - Footing Layout",
+  "Layout/Plan/Drawings - Column Layout",
+  "Layout/Plan/Drawings - Floor Plan - Ground Floor",
+  "Layout/Plan/Drawings - Floor Plan - First Floor",
+  "Layout/Plan/Drawings - Floor Plan - Other Floors",
+  "Site Preparation",
+  "Excavation",
+  "Foundation Work",
+  "Plinth Work",
+  "Superstructure Work",
+  "Roof Work",
+  "Flooring Work",
+  "Plastering",
+  "Door & Window Work",
+  "Electrical & Plumbing Work",
+  "Painting & Finishing Work",
+  "Completed",
+];
+
+const executionStagesForUpperFloors = [
+  "Plinth Work",
+  "Superstructure Work",
+  "Roof Work",
+  "Flooring Work",
+  "Plastering",
+  "Door & Window Work",
+  "Electrical & Plumbing Work",
+  "Painting & Finishing Work",
+  "Completed",
+];
+
+const dprSchema = z.object({
+  projectId: z.string().min(1, "Please select a project"),
+  date: z.string().min(1, "Please select a date"),
+  weather: z.string().optional(),
+  manpowerCount: z.string().optional(),
+  machineryUsed: z.string().optional(),
+  workCompleted: z.string().min(1, "Please describe the work completed"),
+  materialUsed: z.string().optional(),
+  safetyIncidents: z.string().optional(),
+  remarks: z.string().optional(),
+  floor: z.string().optional(),
+  stage: z.string().min(1, "Please select the current stage"),
+  cost: z.string().optional(),
+  laborCost: z.string().optional(),
+  materialCost: z.string().optional(),
+  equipmentCost: z.string().optional(),
+  subcontractorCost: z.string().optional(),
+  otherCost: z.string().optional(),
+});
+type DPRFormData = z.infer<typeof dprSchema>;
+
+interface Project {
+  id: string;
+  name: string;
+}
+interface PhotoFile {
+  file: File;
+  preview: string;
+  description: string;
+}
+
+const SubmitDPR = () => {
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [photos, setPhotos] = useState<PhotoFile[]>([]);
+  const [stageSelectionView, setStageSelectionView] = useState<"floor" | "stage">("floor");
+
+  const form = useForm<DPRFormData>({
+    resolver: zodResolver(dprSchema),
+    defaultValues: {
+      projectId: "",
+      date: "",
+      weather: "",
+      manpowerCount: "",
+      machineryUsed: "",
+      workCompleted: "",
+      materialUsed: "",
+      safetyIncidents: "",
+      remarks: "",
+      floor: "",
+      stage: "",
+      cost: "0",
+      laborCost: "",
+      materialCost: "",
+      equipmentCost: "",
+      subcontractorCost: "",
+      otherCost: "",
+    },
+  });
+
+  useEffect(() => {
+    const initialize = async () => {
+      await checkAuth();
+      await fetchProjects();
+      setLoading(false);
+    };
+    initialize();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const checkAuth = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) navigate("/auth");
+  };
+
+  const fetchProjects = async () => {
+    const { data, error } = await supabase.from("projects").select("id, name");
+    if (error) toast.error("Could not fetch projects.");
+    else setProjects(data || []);
+  };
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    
+    // Validate file sizes and types
+    for (const file of files) {
+      if (!file.type.startsWith("image/")) {
+        toast.error(`File ${file.name} is not an image`);
+        continue;
+      }
+      
+      // Check file size (10MB limit)
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error(`File ${file.name} is too large (max 10MB)`);
+        continue;
+      }
+
+      try {
+        // Compress the image if needed
+        let imageFile = file;
+        if (file.size > 2 * 1024 * 1024) { // If larger than 2MB, compress
+          const options = {
+            maxSizeMB: 2,
+            maxWidthOrHeight: 1920,
+            useWebWorker: true
+          };
+          // Note: You would need to add the 'browser-image-compression' package for this
+          // imageFile = await imageCompression(file, options);
+        }
+
+        // Create preview
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          setPhotos((prev) => [
+            ...prev,
+            { 
+              file: imageFile, 
+              preview: event.target?.result as string, 
+              description: "" 
+            },
+          ]);
+        };
+        reader.onerror = () => {
+          toast.error(`Error reading file ${file.name}`);
+        };
+        reader.readAsDataURL(imageFile);
+      } catch (error) {
+        console.error('Error processing image:', error);
+        toast.error(`Error processing ${file.name}`);
+      }
+    }
+  };
+  const removePhoto = (index: number) => setPhotos((prev) => prev.filter((_, i) => i !== index));
+  const updatePhotoDescription = (index: number, description: string) =>
+    setPhotos((prev) => prev.map((p, i) => (i === index ? { ...p, description } : p)));
+
+  const uploadPhotoToStorage = async (file: File, reportId: string) => {
+    try {
+      // Create a safe filename
+      const fileExt = file.name.split(".").pop()?.toLowerCase() || 'jpg';
+      const safeFileName = `${reportId}_${Date.now()}.${fileExt}`;
+      
+      // Upload with retry logic
+      let attempts = 0;
+      const maxAttempts = 3;
+      
+      while (attempts < maxAttempts) {
+        try {
+          const { error: uploadError } = await supabase.storage
+            .from("dpr-photos")
+            .upload(safeFileName, file, {
+              cacheControl: '3600',
+              contentType: file.type,
+              upsert: false
+            });
+
+          if (uploadError) {
+            console.error('Upload attempt failed:', uploadError);
+            attempts++;
+            if (attempts === maxAttempts) throw uploadError;
+            await new Promise(resolve => setTimeout(resolve, 1000 * attempts)); // Exponential backoff
+            continue;
+          }
+
+          const { data } = supabase.storage.from("dpr-photos").getPublicUrl(safeFileName);
+          return { url: data.publicUrl, name: safeFileName };
+        } catch (error) {
+          console.error('Upload attempt failed:', error);
+          attempts++;
+          if (attempts === maxAttempts) throw error;
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
+        }
+      }
+      throw new Error('Failed to upload after multiple attempts');
+    } catch (error) {
+      console.error('Error in uploadPhotoToStorage:', error);
+      throw new Error(`Failed to upload photo: ${error.message || 'Unknown error'}`);
+    }
+  };
+
+  // Type-safe total calculation
+  const calculateTotalCost = useCallback(() => {
+    const isLayoutStage = !!form.getValues("stage") && form.getValues("stage").startsWith("Layout/Plan/Drawings");
+    const fields: (keyof DPRFormData)[] = isLayoutStage
+      ? ["laborCost", "otherCost"]
+      : ["laborCost", "materialCost", "equipmentCost", "subcontractorCost", "otherCost"];
+    const total = fields.reduce((sum, key) => {
+      const raw = form.getValues(key);
+      const n = Number(raw || 0);
+      return sum + (isNaN(n) ? 0 : n);
+    }, 0);
+    form.setValue("cost", total.toString(), { shouldValidate: true });
+    return total;
+  }, [form]);
+
+  useEffect(() => {
+    const subscription = form.watch((_, { name }) => {
+      if (
+        name &&
+        ["laborCost", "materialCost", "equipmentCost", "subcontractorCost", "otherCost"].includes(
+          name as string
+        )
+      ) {
+        calculateTotalCost();
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [form, calculateTotalCost]);
+
+  const selectedFloor = form.watch("floor");
+  const selectedStage = form.watch("stage");
+
+  const isLayoutStage = !!selectedStage && selectedStage.startsWith("Layout/Plan/Drawings");
+
+  // SUBMIT HANDLER: called after validation
+  const onSubmit = async (data: DPRFormData) => {
+    setLoading(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    console.log("Auth status:", session ? "Logged in" : "Not logged in");
+    
+    if (!session) {
+      console.log("No session found - redirecting to auth");
+      toast.error("You must be logged in to submit a report.");
+      setLoading(false);
+      navigate("/auth");
+      return;
+    }
+    try {
+      // Always use calculated total cost
+      const isLayoutStage = data.stage?.startsWith("Layout/Plan/Drawings");
+      let total = 0;
+      if (isLayoutStage) {
+        total = parseFloat(data.laborCost || "0") + parseFloat(data.otherCost || "0");
+      } else {
+        total =
+          parseFloat(data.laborCost || "0") +
+          parseFloat(data.materialCost || "0") +
+          parseFloat(data.equipmentCost || "0") +
+          parseFloat(data.subcontractorCost || "0") +
+          parseFloat(data.otherCost || "0");
+      }
+      const payload: any = {
+        project_id: data.projectId,
+        report_date: data.date,
+        weather: data.weather,
+        manpower_count: data.manpowerCount ? parseInt(data.manpowerCount, 10) : null,
+        work_completed: data.workCompleted,
+        cost: total,
+        floor: data.floor,
+        stage: data.stage,
+        remarks: data.remarks || null,
+        user_id: session.user.id,
+      };
+      if (isLayoutStage) {
+        payload.labor_cost = parseFloat(data.laborCost || "0"); // Architect
+        payload.other_cost = parseFloat(data.otherCost || "0");
+      } else {
+        payload.labor_cost = parseFloat(data.laborCost || "0");
+        payload.material_cost = parseFloat(data.materialCost || "0");
+        payload.equipment_cost = parseFloat(data.equipmentCost || "0");
+        payload.subcontractor_cost = parseFloat(data.subcontractorCost || "0");
+        payload.other_cost = parseFloat(data.otherCost || "0");
+        payload.machinery_used = data.machineryUsed || null;
+        payload.materials_used = data.materialUsed || null;
+        payload.safety_incidents = data.safetyIncidents || null;
+      }
+
+      const { data: reportData, error: insertErr } = await supabase
+        .from("daily_reports")
+        .insert([payload])
+        .select()
+        .single();
+      if (insertErr) throw insertErr;
+
+      if (photos.length > 0) {
+        // Upload photos sequentially to avoid overwhelming mobile connections
+        for (const photo of photos) {
+          try {
+            const { url, name } = await uploadPhotoToStorage(photo.file, reportData.id);
+            const { error: insertError } = await supabase.from("dpr_photos").insert([
+              {
+                daily_report_id: reportData.id,
+                user_id: session.user.id,
+                file_name: name,
+                file_path: `dpr-photos/${name}`,
+                public_url: url,
+                description: photo.description,
+                file_size: photo.file.size,
+                mime_type: photo.file.type,
+              },
+            ]);
+            
+            if (insertError) {
+              console.error('Error inserting photo record:', insertError);
+              toast.error(`Failed to save photo ${name} details`);
+            } else {
+              toast.success(`Uploaded photo ${photos.indexOf(photo) + 1} of ${photos.length}`);
+            }
+          } catch (error) {
+            console.error('Error uploading photo:', error);
+            toast.error(`Failed to upload photo ${photos.indexOf(photo) + 1}`);
+          }
+        }
+      }
+
+      toast.success("DPR submitted successfully!");
+      navigate("/admin");
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : JSON.stringify(err);
+      toast.error("Error submitting report: " + errorMessage);
+      console.error("DPR submit error:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <Building2 className="h-12 w-12 text-primary mx-auto mb-4 animate-pulse" />
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
+      <header className="border-b border-border">
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="bg-primary p-2 rounded-lg">
+              <Building2 className="h-6 w-6 text-primary-foreground" />
+            </div>
+            <h1 className="text-2xl font-bold text-foreground">Submit Daily Progress Report</h1>
+          </div>
+          <Button variant="ghost" onClick={() => navigate("/admin")}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Dashboard
+          </Button>
+        </div>
+      </header>
+
+      <main className="container mx-auto px-4 py-8 max-w-3xl">
+        <Form {...form}>
+          <form
+            onSubmit={form.handleSubmit(
+              onSubmit,
+              (errors) => {
+                console.log("Form submission failed with validation errors:", errors);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+                toast.error('Please fill all required fields correctly.');
+                console.error('Form validation errors:', errors);
+              }
+            )}
+            className="bg-card rounded-lg p-8 border border-border space-y-6"
+          >
+            {/* Project */}
+            <FormField
+              control={form.control}
+              name="projectId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Project Name *</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a project" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {projects.map((project) => (
+                        <SelectItem key={project.id} value={project.id}>
+                          {project.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Date */}
+            <FormField
+              control={form.control}
+              name="date"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Date *</FormLabel>
+                  <FormControl>
+                    <Input type="date" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Weather */}
+            <FormField control={form.control} name="weather" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Weather</FormLabel>
+                <FormControl>
+                  <Input placeholder="E.g. Sunny, Rainy, Cloudy" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )} />
+
+            {/* Stage selection with floor-first view */}
+            <FormField
+              control={form.control}
+              name="stage"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Project Stage *</FormLabel>
+                  <Select
+                    onValueChange={(value) => {
+                      if (stageSelectionView === "floor") {
+                        form.setValue("floor", value as any);
+                        form.setValue("stage", "");
+                        setStageSelectionView("stage");
+                      } else if (value === "back_to_floor") {
+                        setStageSelectionView("floor");
+                        form.setValue("stage", "");
+                      } else {
+                        field.onChange(value);
+                      }
+                    }}
+                    value={stageSelectionView === "floor" ? selectedFloor : field.value}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder={stageSelectionView === "floor" ? "First, select a floor..." : "Then, select a stage..."} />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {stageSelectionView === "floor" ? (
+                        <SelectGroup>
+                          <SelectLabel>Floors</SelectLabel>
+                          <SelectItem value="ground">Ground Floor</SelectItem>
+                          <SelectItem value="first">First Floor</SelectItem>
+                          <SelectItem value="other">Other Floors</SelectItem>
+                        </SelectGroup>
+                      ) : (
+                        <>
+                          <SelectItem value="back_to_floor">← Change Floor</SelectItem>
+                          {selectedFloor === "ground" ? (
+                            <>
+                              <SelectGroup>
+                                <SelectLabel>Layout/Plan/Drawings</SelectLabel>
+                                {allProjectStages
+                                  .filter((s) => s.startsWith("Layout/Plan/Drawings"))
+                                  .map((s) => (
+                                    <SelectItem key={s} value={s}>
+                                      {s.replace("Layout/Plan/Drawings - ", "")}
+                                    </SelectItem>
+                                  ))}
+                              </SelectGroup>
+                              <SelectGroup>
+                                <SelectLabel>Execution</SelectLabel>
+                                {allProjectStages
+                                  .filter((s) => !s.startsWith("Layout/Plan/Drawings"))
+                                  .map((s) => (
+                                    <SelectItem key={s} value={s}>
+                                      {s}
+                                    </SelectItem>
+                                  ))}
+                              </SelectGroup>
+                            </>
+                          ) : (
+                            <SelectGroup>
+                              <SelectLabel>Execution</SelectLabel>
+                              {executionStagesForUpperFloors.map((stage) => (
+                                <SelectItem key={stage} value={stage}>
+                                  {stage}
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                          )}
+                        </>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Cost Breakdown (conditional) */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <IndianRupee className="h-5 w-5" />
+                  Cost Breakdown
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {isLayoutStage ? (
+                    <>
+                      {/* Architect cost (mapped to laborCost in the form / labor_cost in DB) */}
+                      <FormField control={form.control} name="laborCost" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Architect Cost (₹)</FormLabel>
+                          <FormControl>
+                            <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      <FormField control={form.control} name="otherCost" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Other Costs (₹)</FormLabel>
+                          <FormControl>
+                            <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                    </>
+                  ) : (
+                    <>
+                      <FormField control={form.control} name="laborCost" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Labor Cost (₹)</FormLabel>
+                          <FormControl>
+                            <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      <FormField control={form.control} name="materialCost" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Material Cost (₹)</FormLabel>
+                          <FormControl>
+                            <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      <FormField control={form.control} name="equipmentCost" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Equipment Cost (₹)</FormLabel>
+                          <FormControl>
+                            <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      <FormField control={form.control} name="subcontractorCost" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Subcontractor Cost (₹)</FormLabel>
+                          <FormControl>
+                            <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      <FormField control={form.control} name="otherCost" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Other Costs (₹)</FormLabel>
+                          <FormControl>
+                            <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                    </>
+                  )}
+
+                  <div className="space-y-2">
+                    <Label>Total Cost (₹)</Label>
+                    <div className="p-2 bg-muted rounded-md font-semibold">
+                      ₹{Number(form.watch("cost")).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Conditionally hide execution-specific fields for layout stages */}
+            {!isLayoutStage && (
+              <>
+                <FormField control={form.control} name="manpowerCount" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Manpower Count</FormLabel>
+                    <FormControl>
+                      <Input type="number" placeholder="Enter number of workers" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+
+                <FormField control={form.control} name="machineryUsed" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Machinery Used</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g., Crane, Excavator, Mixer" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+
+                <FormField control={form.control} name="materialUsed" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Materials Used</FormLabel>
+                    <FormControl>
+                      <Textarea placeholder="List materials used" rows={3} {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+
+                <FormField control={form.control} name="safetyIncidents" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Safety Incidents</FormLabel>
+                    <FormControl>
+                      <Textarea placeholder="Report any safety incidents" rows={3} {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </>
+            )}
+
+            {/* Work Completed (always visible) */}
+            <FormField control={form.control} name="workCompleted" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Work Completed *</FormLabel>
+                <FormControl>
+                  <Textarea placeholder="Describe the work completed today" rows={4} {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )} />
+
+            {/* Photos */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Camera className="h-5 w-5" />
+                  Progress Photos
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
+                  <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                  <Label htmlFor="photo-upload" className="cursor-pointer">
+                    <span className="text-sm font-medium text-primary hover:text-primary/80">Click to upload photos</span>
+                    <span className="text-xs text-muted-foreground block mt-1">PNG, JPG, JPEG up to 10MB each</span>
+                  </Label>
+                  <Input id="photo-upload" type="file" multiple accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+                </div>
+                {photos.length > 0 && (
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-medium">Uploaded Photos ({photos.length})</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {photos.map((photo, index) => (
+                        <div key={index} className="relative border border-border rounded-lg overflow-hidden">
+                          <img src={photo.preview} alt={`Upload ${index + 1}`} className="w-full h-32 object-cover" />
+                          <Button type="button" variant="destructive" size="sm" className="absolute top-2 right-2 h-6 w-6 p-0" onClick={() => removePhoto(index)}>
+                            <X className="h-3 w-3" />
+                          </Button>
+                          <div className="p-3">
+                            <Textarea placeholder="Add description..." value={photo.description} onChange={(e) => updatePhotoDescription(index, e.target.value)} rows={2} className="text-xs" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Remarks */}
+            <FormField control={form.control} name="remarks" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Additional Remarks</FormLabel>
+                <FormControl>
+                  <Textarea placeholder="Any additional notes" rows={3} {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )} />
+
+            <div className="flex gap-4 pt-4">
+              <Button type="submit" className="flex-1" disabled={loading}>
+                {loading ? "Submitting..." : "Submit DPR"}
+              </Button>
+              <Button type="button" variant="outline" onClick={() => navigate("/admin")}>Cancel</Button>
+            </div>
+          </form>
+        </Form>
+      </main>
+    </div>
+  );
+};
+
+export default SubmitDPR;
